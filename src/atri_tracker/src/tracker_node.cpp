@@ -14,7 +14,7 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
   target_frame_ = this->declare_parameter("target_frame", "color_block_circle");
 
   // Subscriber with tf2 message_filter
-  tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  /* tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
     this->get_node_base_interface(), this->get_node_timers_interface());
   tf2_buffer_->setCreateTimerInterface(timer_interface);
@@ -23,7 +23,7 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
   tf2_filter_ = std::make_shared<tf2_filter>(
     color_block_sub_, *tf2_buffer_, target_frame_, 20, this->get_node_logging_interface(),
     this->get_node_clock_interface(), std::chrono::duration<int>(1));
-  tf2_filter_->registerCallback(&TrackerNode::colorBlockCallback, this);
+  tf2_filter_->registerCallback(&TrackerNode::colorBlockCallback, this); */
 }
 
 void TrackerNode::colorBlockCallback(
@@ -36,7 +36,6 @@ void TrackerNode::colorBlockCallback(
         target_frame_, color_block_msg->header.frame_id, color_block_msg->header.stamp,
         rclcpp::Duration::from_seconds(0.0));
     } catch (tf2::TransformException & ex) {
-      RCLCPP_WARN(this->get_logger(), "%s", ex.what());
       return;
     }
     tf2::doTransform(color_block.pose, color_block.pose, transform_stamped);

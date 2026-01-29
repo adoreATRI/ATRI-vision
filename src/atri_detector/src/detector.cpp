@@ -8,25 +8,27 @@ namespace atri_detector
 Detector::Detector()
 {
   // 调试
-  /* h_min_ = 20;
+  h_min_ = 20;
   h_max_ = 40;
   s_min_ = 30;
   s_max_ = 200;
   v_min_ = 60;
-  v_max_ = 255; */
+  v_max_ = 255;
 }
 
 // 调试
-/* void Detector::InitHsvTuner()
+void Detector::InitHsvTuner()
 {
   cv::namedWindow("hsv_tuner", cv::WINDOW_NORMAL);
-  cv::createTrackbar("H Min", "hsv_tuner", &h_min_, 179);
+  /*   cv::createTrackbar("H Min", "hsv_tuner", &h_min_, 179);
   cv::createTrackbar("H Max", "hsv_tuner", &h_max_, 179);
   cv::createTrackbar("S Min", "hsv_tuner", &s_min_, 255);
   cv::createTrackbar("S Max", "hsv_tuner", &s_max_, 255);
   cv::createTrackbar("V Min", "hsv_tuner", &v_min_, 255);
-  cv::createTrackbar("V Max", "hsv_tuner", &v_max_, 255);
-} */
+  cv::createTrackbar("V Max", "hsv_tuner", &v_max_, 255); */
+  cv::createTrackbar("Gray Min", "hsv_tuner", &gray_min_, 100);
+  cv::createTrackbar("Gray Max", "hsv_tuner", &gray_max_, 255);
+}
 
 std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
 {
@@ -220,45 +222,40 @@ std::vector<std::vector<cv::Point>> Detector::processImage(cv::Mat image)
   cv::Mat image_hsv;
   cv::cvtColor(image_blurred, image_hsv, cv::COLOR_BGR2HSV);
 
-  /*   std::vector<cv::Mat> lab_planes;
-  cv::split(image_Lab, lab_planes);
-   double clipLimit = 2.0;
-  cv::Size tileGridSize(8, 8);
-  cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(clipLimit, tileGridSize);
-  cv::Mat L_clahe;
-  clahe->apply(lab_planes[0], L_clahe);
-  lab_planes[0] = L_clahe;
-  cv::merge(lab_planes, image_Lab); */
-
   cv::Mat mask;
   cv::adaptiveThreshold(
-    image_gray, mask, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY_INV, 11, 2.0);
+    image_gray, mask, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY_INV, 19, 3.5);
+
   cv::Mat mask_other1;
   cv::Mat mask_other2;
-  cv::inRange(image_hsv, cv::Scalar(25, 30, 60), cv::Scalar(40, 130, 200), mask_other1);
-  cv::inRange(image_hsv, cv::Scalar(10, 40, 0), cv::Scalar(20, 110, 255), mask_other2);
+  cv::inRange(image_hsv, cv::Scalar(20, 50, 60), cv::Scalar(40, 200, 255), mask_other1);
+  cv::inRange(image_hsv, cv::Scalar(0, 60, 50), cv::Scalar(25, 255, 255), mask_other2);
   cv::bitwise_or(mask, mask_other1, mask);
   cv::bitwise_or(mask, mask_other2, mask);
 
   // 调试
-  /* cv::Mat mask_other;
-  cv::inRange(
-    image_hsv, cv::Scalar(h_min_, s_min_, v_min_), cv::Scalar(h_max_, s_max_, v_max_), mask_other);
+  /* cv::Mat mask_other; */
+  /* cv::inRange(
+    image_hsv, cv::Scalar(h_min_, s_min_, v_min_), cv::Scalar(h_max_, s_max_, v_max_), mask_other); */
+  /*   cv::inRange(image_gray, gray_min_, gray_max_, mask_other);
   cv::Vec3b hsv = image_hsv.at<cv::Vec3b>(image_hsv.rows / 2, image_hsv.cols / 2);
   std::cout << "[Detector] HSV at center: (" << (int)hsv[0] << ", " << (int)hsv[1] << ", "
             << (int)hsv[2] << ")" << std::endl; */
 
   cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-  cv::Mat kernel_big = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
   cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel, cv::Point(-1, -1), 1);
-  cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel_big, cv::Point(-1, -1), 1);
+  cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 1);
 
-  cv::Canny(mask, mask, 50, 150);
+  cv::medianBlur(mask, mask, 5);
+
   std::vector<std::vector<cv::Point>> contours;
   cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-  // debug
-  cv::imshow("canny", mask);
+  for (size_t i = 0; i < contours.size(); ++i) {
+    cv::drawContours(image, contours, static_cast<int>(i), cv::Scalar(0, 0, 255), 2);
+  }
+
+  cv::imshow("image", image);
   cv::waitKey(1);
 
   return contours;

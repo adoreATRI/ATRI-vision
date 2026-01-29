@@ -22,7 +22,7 @@ class Detector
 public:
   Detector();
   // 调试
-  /* void InitHsvTuner(); */
+  void InitHsvTuner();
 
   // Detector ColorBlocks
   std::vector<ColorBlock> Detect(cv::Mat & image);
@@ -50,6 +50,8 @@ private:
   int s_max_;
   int v_min_;
   int v_max_;
+  int gray_min_ = 100;
+  int gray_max_ = 255;
 };
 
 }  // namespace atri_detector
