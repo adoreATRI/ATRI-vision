@@ -1,0 +1,44 @@
+from launch import LaunchDescription
+from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.descriptions import ComposableNode
+from ament_index_python.packages import get_package_share_directory
+import os
+
+def generate_launch_description():
+
+    config = os.path.join(
+      get_package_share_directory('bringup'),
+        'config',
+        'camera_params.yaml'    
+    )
+
+    container = ComposableNodeContainer(
+        name='vision_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_mt',
+        output='screen',
+        composable_node_descriptions=[
+
+            ComposableNode(
+                package='usb_camera_driver',
+                plugin='usb_camera_driver::CameraCaptureNode',
+                name='camera_capture_node',
+                parameters=[config]
+            ),
+
+            ComposableNode(
+                package='atri_detector',
+                plugin='atri_detector::DetectorNode',
+                name='detector_node',
+            ),
+
+            ComposableNode(
+                package='atri_tracker',
+                plugin='atri_tracker::TrackerNode',
+                name='tracker_node',
+            ),
+        ]
+    )
+
+    return LaunchDescription([container])
