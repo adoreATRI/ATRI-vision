@@ -10,7 +10,6 @@ struct ColorBlock
 {
   ColorBlock() = default;
   std::vector<cv::Point2f> kpt;
-  std::vector<float> ab_channels;
   float diff;
 };
 

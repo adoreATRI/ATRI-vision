@@ -19,196 +19,49 @@ Detector::Detector()
 // 调试
 void Detector::InitHsvTuner()
 {
-  cv::namedWindow("hsv_tuner", cv::WINDOW_NORMAL);
-  /*   cv::createTrackbar("H Min", "hsv_tuner", &h_min_, 179);
-  cv::createTrackbar("H Max", "hsv_tuner", &h_max_, 179);
-  cv::createTrackbar("S Min", "hsv_tuner", &s_min_, 255);
-  cv::createTrackbar("S Max", "hsv_tuner", &s_max_, 255);
-  cv::createTrackbar("V Min", "hsv_tuner", &v_min_, 255);
-  cv::createTrackbar("V Max", "hsv_tuner", &v_max_, 255); */
-  cv::createTrackbar("Gray Min", "hsv_tuner", &gray_min_, 100);
-  cv::createTrackbar("Gray Max", "hsv_tuner", &gray_max_, 255);
+  cv::namedWindow("debug_tuner", cv::WINDOW_NORMAL);
+  /* cv::createTrackbar("H Min", "debug_tuner", &h_min_, 179);
+  cv::createTrackbar("H Max", "debug_tuner", &h_max_, 179);
+  cv::createTrackbar("S Min", "debug_tuner", &s_min_, 255);
+  cv::createTrackbar("S Max", "debug_tuner", &s_max_, 255);
+  cv::createTrackbar("V Min", "debug_tuner", &v_min_, 255);
+  cv::createTrackbar("V Max", "debug_tuner", &v_max_, 255);
+  cv::createTrackbar("Gray Min", "debug_tuner", &gray_min_, 1);
+  cv::createTrackbar("Gray Max", "debug_tuner", &gray_max_, 255); */
+  /* cv::createTrackbar("AB Diff", "debug_tuner", &ab_diff_, 10);
+  cv::createTrackbar("H Diff", "debug_tuner", &h_diff_, 10);
+  cv::createTrackbar("S Diff", "debug_tuner", &s_diff_, 10);
+  cv::createTrackbar("Gray Diff", "debug_tuner", &gray_diff_, 10); */
 }
 
 std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
 {
   std::vector<ColorBlock> blocks;
 
-  cv::Mat image_Lab;
-  cv::cvtColor(image, image_Lab, cv::COLOR_BGR2Lab);
-
   // Process image
   std::vector<std::vector<cv::Point>> contours = processImage(image);
 
-  cv::Point2f circle_center;
-  double max_circle_area = 0.0;
-  int index_of_circle = -1;
+  // Find colorblocks
+  // Find circle colorblock
+  ColorBlock circle_block;
+  findCircleColorBlock(contours, circle_block);
 
-  // 先确定中心圆色块
-  for (size_t i = 0; i < contours.size(); ++i) {
-    double area = cv::contourArea(contours[i]);
-    if (area < 1000) {
-      continue;
-    }
-    if (calculateCircularity(contours[i])) {
-      if (area > max_circle_area) {
-        max_circle_area = area;
-        index_of_circle = i;
-      }
-    } else {
-      continue;
-    }
+  if (!circle_block.kpt.empty()) {
+    blocks.push_back(circle_block);
+
+    // Find rectangle colorblocks
+    findRectangleColorBlocks(contours, blocks);
+
+    // Get Color Features
+    getColorFeatures(image, blocks);
+
+    // Debug
+    drawDetectedBlocks(image, blocks);
   }
 
-  if (index_of_circle >= 0) {
-    ColorBlock block;
-    cv::Moments m = cv::moments(contours[index_of_circle]);
-    if (m.m00 > 1e-6) {
-      circle_center =
-        cv::Point2f(static_cast<float>(m.m10 / m.m00), static_cast<float>(m.m01 / m.m00));
-    }
-
-    cv::Point2f left, right, top, bottom;
-    float min_dx = +FLT_MAX;
-    float max_dx = -FLT_MAX;
-    float min_dy = +FLT_MAX;
-    float max_dy = -FLT_MAX;
-
-    for (auto & pt : contours[index_of_circle]) {
-      float dx = pt.x - circle_center.x;
-      float dy = pt.y - circle_center.y;
-
-      if (dx < min_dx) {
-        min_dx = dx;
-        left = pt;
-      }
-      if (dx > max_dx) {
-        max_dx = dx;
-        right = pt;
-      }
-      if (dy < min_dy) {
-        min_dy = dy;
-        top = pt;
-      }
-      if (dy > max_dy) {
-        max_dy = dy;
-        bottom = pt;
-      }
-    }
-
-    std::vector<cv::Point2f> circle_kpt = {left, top, right, bottom};
-    block.kpt = circle_kpt;
-    block.kpt.push_back(circle_center);
-    blocks.push_back(block);
-    // 调试
-    for (size_t i = 0; i < block.kpt.size(); ++i) {
-      cv::putText(
-        image, std::to_string(i), block.kpt[i], cv::FONT_HERSHEY_SIMPLEX, 0.8,
-        cv::Scalar(255, 0, 0), 2);
-    }
-    cv::drawContours(image, contours, index_of_circle, cv::Scalar(255, 0, 0), 2);
-  }
-
-  // 再检测矩形色块
-  float side_length = 0.0f;
-  for (const auto & contour : contours) {
-    if (calculateCircularity(contour)) {
-      continue;
-    }
-    double area = cv::contourArea(contour);
-    if (area < 1000) {
-      continue;
-    }
-
-    std::vector<cv::Point2f> corners;
-    std::vector<cv::Point> approx;
-    cv::approxPolyDP(contour, approx, 0.02 * cv::arcLength(contour, true), true);
-    if (approx.size() == 4) {
-      for (const auto & pt : approx) {
-        corners.push_back(cv::Point2f(pt.x, pt.y));
-      }
-    } else {
-      cv::RotatedRect rect = cv::minAreaRect(contour);
-      cv::Point2f pts[4];
-      rect.points(pts);
-      for (int i = 0; i < 4; i++) {
-        corners.push_back(pts[i]);
-      }
-    }
-
-    // 剔除其他矩形
-    float aspect_ratio =
-      std::min(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2])) /
-      std::max(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2]));
-
-    if (aspect_ratio < 0.7) {
-      continue;
-    }
-
-    if (
-      !isPointNearLine(circle_center, corners[0], corners[2], 10.0) &&
-      !isPointNearLine(circle_center, corners[1], corners[3], 10.0)) {
-      continue;
-    }
-
-    cv::Point2f center = cv::Point2f(0, 0);
-    cv::Moments m = cv::moments(contour);
-    if (m.m00 > 1e-6) {
-      center = cv::Point2f(static_cast<float>(m.m10 / m.m00), static_cast<float>(m.m01 / m.m00));
-    }
-
-    if (
-      cv::norm(circle_center - center) >
-      3 * std::max(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2]))) {
-      continue;
-    }
-
-    side_length = std::min(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2]));
-
-    // 包装ColorBlock
-    ColorBlock block;
-    std::vector<cv::Point2f> kpt;
-    std::vector<float> ab_channels = {0.0f, 0.0f};
-
-    sortCorners(circle_center, corners);
-    getABMean(image_Lab, center, ab_channels);
-
-    block.ab_channels = ab_channels;
-    block.kpt = corners;
-    block.kpt.push_back(center);
-    blocks.push_back(block);
-
-    // 调试
-    for (int j = 0; j < 4; j++) {
-      cv::line(image, corners[j], corners[(j + 1) % 4], cv::Scalar(0, 255, 0), 2);
-    }
-    for (size_t k = 0; k < block.kpt.size() - 1; ++k) {
-      cv::putText(
-        image, std::to_string(k), block.kpt[k], cv::FONT_HERSHEY_SIMPLEX, 0.8,
-        cv::Scalar(255, 0, 0), 2);
-    }
-  }
-
-  // 获取圆的ab均值，计算色差
-  if (index_of_circle >= 0) {
-    std::vector<float> circle_ab_channels{0.0f, 0.0f};
-    getCircleABMean(image_Lab, circle_center, side_length, circle_ab_channels);
-    blocks[0].ab_channels = circle_ab_channels;
-
-    for (size_t i = 1; i < blocks.size(); ++i) {
-      float distance = 0.0f;
-      ABDistance(blocks[0].ab_channels, blocks[i].ab_channels, distance);
-      blocks[i].diff = distance;
-
-      cv::putText(
-        image, "D:" + std::to_string(static_cast<int>(distance)), blocks[i].kpt.back(),
-        cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 0), 2);
-    }
-  }
-
-  cv::imshow("detector", image);
-
+  cv::imshow("debug", image);
   cv::waitKey(1);
+
   return blocks;
 }
 
@@ -251,14 +104,199 @@ std::vector<std::vector<cv::Point>> Detector::processImage(cv::Mat image)
   std::vector<std::vector<cv::Point>> contours;
   cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-  for (size_t i = 0; i < contours.size(); ++i) {
-    cv::drawContours(image, contours, static_cast<int>(i), cv::Scalar(0, 0, 255), 2);
-  }
-
-  cv::imshow("image", image);
+  cv::imshow("mask", mask);
   cv::waitKey(1);
 
   return contours;
+}
+
+void Detector::findCircleColorBlock(
+  const std::vector<std::vector<cv::Point>> & contours, ColorBlock & circle_block)
+{
+  cv::Point2f circle_center;
+  double max_circle_area = 0.0;
+  int index_of_circle = -1;
+
+  // 找到最大的圆形轮廓
+  for (size_t i = 0; i < contours.size(); ++i) {
+    double area = cv::contourArea(contours[i]);
+    if (area < 1000) {
+      continue;
+    }
+    if (calculateCircularity(contours[i])) {
+      if (area > max_circle_area) {
+        max_circle_area = area;
+        index_of_circle = i;
+      }
+    } else {
+      continue;
+    }
+  }
+
+  // 确定圆形色块存在后，找到关键点
+  if (index_of_circle >= 0) {
+    cv::Moments m = cv::moments(contours[index_of_circle]);
+    if (m.m00 > 1e-6) {
+      circle_center =
+        cv::Point2f(static_cast<float>(m.m10 / m.m00), static_cast<float>(m.m01 / m.m00));
+    }
+
+    cv::Point2f left, right, top, bottom;
+    float min_dx = +FLT_MAX;
+    float max_dx = -FLT_MAX;
+    float min_dy = +FLT_MAX;
+    float max_dy = -FLT_MAX;
+
+    for (auto & pt : contours[index_of_circle]) {
+      float dx = pt.x - circle_center.x;
+      float dy = pt.y - circle_center.y;
+
+      if (dx < min_dx) {
+        min_dx = dx;
+        left = pt;
+      }
+      if (dx > max_dx) {
+        max_dx = dx;
+        right = pt;
+      }
+      if (dy < min_dy) {
+        min_dy = dy;
+        top = pt;
+      }
+      if (dy > max_dy) {
+        max_dy = dy;
+        bottom = pt;
+      }
+    }
+
+    std::vector<cv::Point2f> circle_kpt = {left, top, right, bottom};
+    circle_block.kpt = circle_kpt;
+    circle_block.kpt.push_back(circle_center);
+  }
+}
+
+void Detector::findRectangleColorBlocks(
+  const std::vector<std::vector<cv::Point>> & contours, std::vector<ColorBlock> & blocks)
+{
+  for (const auto & contour : contours) {
+    if (calculateCircularity(contour)) {
+      continue;
+    }
+
+    double area = cv::contourArea(contour);
+    if (
+      area < 100 || area > (cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1]) *
+                            cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1]) * 7)) {
+      continue;
+    }
+
+    // 获取矩形轮廓的四个角点
+    std::vector<cv::Point2f> corners;
+    std::vector<cv::Point> approx;
+    cv::approxPolyDP(contour, approx, 0.02 * cv::arcLength(contour, true), true);
+    if (approx.size() == 4) {
+      for (const auto & pt : approx) {
+        corners.push_back(cv::Point2f(pt.x, pt.y));
+      }
+    } else {
+      cv::RotatedRect rect = cv::minAreaRect(contour);
+      cv::Point2f pts[4];
+      rect.points(pts);
+      for (int i = 0; i < 4; i++) {
+        corners.push_back(pts[i]);
+      }
+    }
+
+    // 筛选矩形色块
+    // 长宽比
+    float aspect_ratio =
+      std::min(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2])) /
+      std::max(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2]));
+
+    if (aspect_ratio < 0.5f) {
+      continue;
+    }
+
+    // 矩形对角线是否通过圆心
+    if (
+      !isPointNearLine(blocks[0].kpt[4], corners[0], corners[2], 15.0) &&
+      !isPointNearLine(blocks[0].kpt[4], corners[1], corners[3], 15.0)) {
+      continue;
+    }
+
+    cv::Point2f center = cv::Point2f(0, 0);
+    cv::Moments m = cv::moments(contour);
+    if (m.m00 > 1e-6) {
+      center = cv::Point2f(static_cast<float>(m.m10 / m.m00), static_cast<float>(m.m01 / m.m00));
+    }
+
+    // 矩形到圆心距离
+    if (cv::norm(blocks[0].kpt[4] - center) > 5 * cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1])) {
+      continue;
+    }
+
+    ColorBlock block;
+    std::vector<cv::Point2f> kpt;
+    sortCorners(blocks[0].kpt[4], corners);
+    block.kpt = corners;
+    block.kpt.push_back(center);
+    blocks.push_back(block);
+  }
+}
+
+void Detector::getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> & blocks)
+{
+  std::vector<int> ab_channels_circle;
+  int h_circle;
+  int s_circle;
+  int gray_circle;
+
+  getCircleColorFeatures(image, blocks[0], ab_channels_circle, h_circle, s_circle, gray_circle);
+  for (size_t i = 1; i < blocks.size(); ++i) {
+    std::vector<int> ab_channels;
+    int h_value;
+    int s_value;
+    int gray_value;
+    getColorFeatures(image, blocks[i], ab_channels, h_value, s_value, gray_value);
+
+    float ab_distance = 0.0f;
+    float h_distance = 0.0f;
+    float s_distance = 0.0f;
+    float gray_distance = 0.0f;
+    abDistance(ab_channels_circle, ab_channels, ab_distance);
+    h_distance = std::abs(h_circle - h_value);
+    s_distance = std::abs(s_circle - s_value);
+    gray_distance = std::abs(gray_circle - gray_value);
+
+    blocks[i].diff = 4.0 * (0.2f * ab_distance + 2.0f * 0.2f * h_distance +
+                            2.0f * 0.3f * s_distance + 0.3f * gray_distance);
+  }
+}
+
+void Detector::drawDetectedBlocks(cv::Mat & image, const std::vector<ColorBlock> & blocks)
+{
+  float min_diff = FLT_MAX;
+  int index = -1;
+
+  for (size_t i = 1; i < blocks.size(); ++i) {
+    for (size_t j = 0; j < 4; ++j) {
+      cv::line(image, blocks[i].kpt[j], blocks[i].kpt[(j + 1) % 4], cv::Scalar(0, 255, 0), 2);
+    }
+    if (blocks[i].diff < min_diff) {
+      min_diff = blocks[i].diff;
+      index = static_cast<int>(i);
+    }
+    cv::putText(
+      image, std::to_string(blocks[i].diff), blocks[i].kpt[4], cv::FONT_HERSHEY_SIMPLEX, 0.6,
+      cv::Scalar(0, 0, 255), 3);
+  }
+
+  if (index < 0) {
+    return;
+  }
+  for (size_t k = 0; k < 4; ++k) {
+    cv::circle(image, blocks[index].kpt[k], 5, cv::Scalar(255, 255, 0), -1);
+  }
 }
 
 bool Detector::calculateCircularity(const std::vector<cv::Point> & contour)
@@ -342,32 +380,59 @@ void Detector::sortCorners(const cv::Point2f & circle_center, std::vector<cv::Po
   corners.swap(sorted);
 }
 
-void Detector::getCircleABMean(
-  const cv::Mat & image_Lab, const cv::Point2f & center, float side_length,
-  std::vector<float> & ab_channels)
+void Detector::getCircleColorFeatures(
+  const cv::Mat & image, const ColorBlock & circle_block, std::vector<int> & ab_channels_circle,
+  int & h_circle, int & s_circle, int & gray_circle)
 {
-  cv::Mat mask = cv::Mat::zeros(image_Lab.size(), CV_8UC1);
-  cv::circle(mask, center, static_cast<int>(side_length * 3 / 8), cv::Scalar(255), -1);
-  cv::circle(mask, center, static_cast<int>(side_length * 5 / 16), cv::Scalar(0), -1);
+  cv::Mat image_lab;
+  cv::Mat image_hsv;
+  cv::Mat image_gray;
+  cv::cvtColor(image, image_hsv, cv::COLOR_BGR2HSV);
+  cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
+  cv::cvtColor(image, image_gray, cv::COLOR_BGR2GRAY);
+  cv::Mat mask = cv::Mat::zeros(image.size(), CV_8UC1);
+  float radius = cv::norm(circle_block.kpt[4] - circle_block.kpt[1]);
+  cv::circle(mask, circle_block.kpt[4], static_cast<int>(0.8 * radius), cv::Scalar(255), -1);
+  cv::circle(mask, circle_block.kpt[4], static_cast<int>(0.5 * radius), cv::Scalar(0), -1);
 
-  cv::Scalar mean_Lab = cv::mean(image_Lab, mask);
-  ab_channels[0] = static_cast<float>(mean_Lab[1]);
-  ab_channels[1] = static_cast<float>(mean_Lab[2]);
+  cv::Scalar mean_lab = cv::mean(image_lab, mask);
+  cv::Scalar mean_hsv = cv::mean(image_hsv, mask);
+  cv::Scalar mean_gray = cv::mean(image_gray, mask);
+  ab_channels_circle.resize(2);
+  ab_channels_circle[0] = static_cast<int>(mean_lab[1]);
+  ab_channels_circle[1] = static_cast<int>(mean_lab[2]);
+  h_circle = static_cast<int>(mean_hsv[0]);
+  s_circle = static_cast<int>(mean_hsv[1]);
+  gray_circle = static_cast<int>(mean_gray[0]);
 }
 
-void Detector::getABMean(
-  const cv::Mat & image_Lab, const cv::Point2f & center, std::vector<float> & ab_channels)
+void Detector::getColorFeatures(
+  const cv::Mat & image, ColorBlock & block, std::vector<int> & ab_channels, int & h_value,
+  int & s_value, int & gray_value)
 {
-  cv::Mat mask = cv::Mat::zeros(image_Lab.size(), CV_8UC1);
-  cv::circle(mask, center, 5, cv::Scalar(255), -1);
+  cv::Mat image_lab;
+  cv::Mat image_hsv;
+  cv::Mat image_gray;
+  cv::cvtColor(image, image_hsv, cv::COLOR_BGR2HSV);
+  cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
+  cv::cvtColor(image, image_gray, cv::COLOR_BGR2GRAY);
 
-  cv::Scalar mean_Lab = cv::mean(image_Lab, mask);
-  ab_channels[0] = static_cast<float>(mean_Lab[1]);
-  ab_channels[1] = static_cast<float>(mean_Lab[2]);
+  cv::Mat mask = cv::Mat::zeros(image.size(), CV_8UC1);
+  cv::circle(mask, block.kpt[4], 5, cv::Scalar(255), -1);
+
+  cv::Scalar mean_lab = cv::mean(image_lab, mask);
+  cv::Scalar mean_hsv = cv::mean(image_hsv, mask);
+  cv::Scalar mean_gray = cv::mean(image_gray, mask);
+  ab_channels.resize(2);
+  ab_channels[0] = static_cast<int>(mean_lab[1]);
+  ab_channels[1] = static_cast<int>(mean_lab[2]);
+  h_value = static_cast<int>(mean_hsv[0]);
+  s_value = static_cast<int>(mean_hsv[1]);
+  gray_value = static_cast<int>(mean_gray[0]);
 }
 
-void Detector::ABDistance(
-  const std::vector<float> & ab1, const std::vector<float> & ab2, float & distance)
+void Detector::abDistance(
+  const std::vector<int> & ab1, const std::vector<int> & ab2, float & distance)
 {
   distance = std::sqrt(std::pow(ab1[0] - ab2[0], 2) + std::pow(ab1[1] - ab2[1], 2));
 }

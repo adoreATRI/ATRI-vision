@@ -10,7 +10,7 @@ DetectorNode::DetectorNode(const rclcpp::NodeOptions & options) : Node("detector
   dynamic_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
   // 调试
-  /*  detector_->InitHsvTuner(); */
+  /* detector_->InitHsvTuner(); */
 
   color_blocks_pub_ =
     this->create_publisher<atri_interfaces::msg::ColorBlockArray>("detector/color_blocks", 10);
