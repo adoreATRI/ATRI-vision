@@ -7,7 +7,8 @@ DetectorNode::DetectorNode(const rclcpp::NodeOptions & options) : Node("detector
   detector_ = std::make_unique<Detector>();
 
   // TF tree
-  dynamic_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  /* dynamic_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(this); */
 
   // 调试
   /* detector_->InitHsvTuner(); */
@@ -53,9 +54,9 @@ void DetectorNode::imageCallback(const sensor_msgs::msg::CompressedImage::ConstS
 
   for (size_t i = 0; i < color_blocks.size(); ++i) {
     atri_interfaces::msg::ColorBlock color_block_msg;
-    color_block_msg.diff = color_blocks[i].diff;
 
     // 将圆和矩形分开进行PnP解算
+    if (!pnp_solver_) return;
     cv::Mat rvec, tvec;
     if (i == 0) {
       if (pnp_solver_->solvePnP_circle(color_blocks[i], rvec, tvec)) {
@@ -77,8 +78,8 @@ void DetectorNode::imageCallback(const sensor_msgs::msg::CompressedImage::ConstS
         color_block_msg.pose.orientation = tf2::toMsg(tf_quaternion);
         color_block_array.color_blocks.emplace_back(color_block_msg);
 
-        // broadcast TF
-        /* geometry_msgs::msg::TransformStamped dynamic_camera_optical_to_circle_color_block;
+        /* // broadcast TF
+        geometry_msgs::msg::TransformStamped dynamic_camera_optical_to_circle_color_block;
         dynamic_camera_optical_to_circle_color_block.header.stamp = msg->header.stamp;
         dynamic_camera_optical_to_circle_color_block.header.frame_id = "camera_optical_frame";
         dynamic_camera_optical_to_circle_color_block.child_frame_id = "color_block_circle";
@@ -93,6 +94,7 @@ void DetectorNode::imageCallback(const sensor_msgs::msg::CompressedImage::ConstS
       }
     } else {
       if (pnp_solver_->solvePnP(color_blocks[i], rvec, tvec)) {
+        color_block_msg.diff = color_blocks[i].diff;
         color_block_msg.pose.position.x = tvec.at<double>(0);
         color_block_msg.pose.position.y = tvec.at<double>(1);
         color_block_msg.pose.position.z = tvec.at<double>(2);
@@ -116,9 +118,6 @@ void DetectorNode::imageCallback(const sensor_msgs::msg::CompressedImage::ConstS
     }
   }
   color_blocks_pub_->publish(color_block_array);
-
-  // target
-  targetColorBlocks(color_block_array);
 }
 
 std::vector<ColorBlock> DetectorNode::DetectColorBlocks(
@@ -141,33 +140,6 @@ std::vector<ColorBlock> DetectorNode::DetectColorBlocks(
   return result;
 }
 
-void DetectorNode::targetColorBlocks(
-  const atri_interfaces::msg::ColorBlockArray & color_block_array)
-{
-  float MIN_DIFF = 100.0f;
-  int index = -1;
-  for (size_t i = 1; i < color_block_array.color_blocks.size(); ++i) {
-    if (color_block_array.color_blocks[i].diff < MIN_DIFF) {
-      MIN_DIFF = color_block_array.color_blocks[i].diff;
-      index = static_cast<int>(i);
-    }
-  }
-  if (index > 0) {
-    geometry_msgs::msg::TransformStamped dynamic_camera_optical_to_target_color_block;
-    dynamic_camera_optical_to_target_color_block.header.stamp = color_block_array.header.stamp;
-    dynamic_camera_optical_to_target_color_block.header.frame_id = "camera_optical_frame";
-    dynamic_camera_optical_to_target_color_block.child_frame_id = "color_block_target";
-    dynamic_camera_optical_to_target_color_block.transform.translation.x =
-      color_block_array.color_blocks[index].pose.position.x;
-    dynamic_camera_optical_to_target_color_block.transform.translation.y =
-      color_block_array.color_blocks[index].pose.position.y;
-    dynamic_camera_optical_to_target_color_block.transform.translation.z =
-      color_block_array.color_blocks[index].pose.position.z;
-    dynamic_camera_optical_to_target_color_block.transform.rotation =
-      color_block_array.color_blocks[index].pose.orientation;
-    dynamic_broadcaster_->sendTransform(dynamic_camera_optical_to_target_color_block);
-  }
-}
 }  // namespace atri_detector
 
 #include "rclcpp_components/register_node_macro.hpp"

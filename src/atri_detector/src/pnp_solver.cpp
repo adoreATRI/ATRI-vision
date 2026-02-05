@@ -35,6 +35,9 @@ bool PnPSolver::solvePnP(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tve
   std::vector<cv::Point2f> image_block_points;
 
   // Fill in image points
+  if (block.kpt.size() < 5) {
+    return false;
+  }
   image_block_points.emplace_back(cv::Point2f(block.kpt[0].x, block.kpt[0].y));
   image_block_points.emplace_back(cv::Point2f(block.kpt[1].x, block.kpt[1].y));
   image_block_points.emplace_back(cv::Point2f(block.kpt[2].x, block.kpt[2].y));
@@ -51,6 +54,9 @@ bool PnPSolver::solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Ma
   std::vector<cv::Point2f> image_circle_points;
 
   // Fill in image points
+  if (block.kpt.size() < 5) {
+    return false;
+  }
   image_circle_points.emplace_back(cv::Point2f(block.kpt[0].x, block.kpt[0].y));
   image_circle_points.emplace_back(cv::Point2f(block.kpt[1].x, block.kpt[1].y));
   image_circle_points.emplace_back(cv::Point2f(block.kpt[2].x, block.kpt[2].y));

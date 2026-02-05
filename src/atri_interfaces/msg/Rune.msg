@@ -8,5 +8,4 @@ float64 a
 float64 w
 float64 b
 float64 c
-int32 offset_id
 int64 t_offset

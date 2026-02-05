@@ -8,6 +8,7 @@
 #include <atri_interfaces/msg/color_block_array.hpp>
 
 // tf2_ros
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_ros/transform_broadcaster.h>
 
 // ros2
@@ -60,9 +61,7 @@ private:
 
   // TF tree
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamic_broadcaster_;
-
-  // target
-  void targetColorBlocks(const atri_interfaces::msg::ColorBlockArray & color_block_array);
+  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_broadcaster_;
 
   // Detector
   std::unique_ptr<Detector> detector_;

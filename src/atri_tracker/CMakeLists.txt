@@ -16,15 +16,30 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(atri_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(angles REQUIRED)
 
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 
 find_package(OpenCV REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 # ================= 创建共享库 =================
 add_library(tracker_node SHARED
   src/tracker_node.cpp
+)
+
+add_library(tracker SHARED
+  src/tracker.cpp
+)
+
+add_library(extended_kalman_filter SHARED
+  src/extended_kalman_filter.cpp
+)
+
+add_library(gauss_newton_solver SHARED 
+  src/gauss_newton_solver.cpp
 )
 
 
@@ -32,6 +47,11 @@ add_library(tracker_node SHARED
 include_directories(include)
 
 target_include_directories(tracker_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+target_include_directories(tracker PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
@@ -47,12 +67,38 @@ atri_interfaces
 geometry_msgs
 tf2_geometry_msgs
 tf2_ros
+visualization_msgs
+)
+
+ament_target_dependencies(tracker
+tf2_geometry_msgs
+atri_interfaces
+geometry_msgs
+angles
+)
+
+ament_target_dependencies(extended_kalman_filter
+Eigen3
+)
+
+ament_target_dependencies(gauss_newton_solver
+Eigen3
 )
 
 # =============== 链接库 ================
 target_link_libraries(tracker_node
   ${OpenCV_LIBS}
+  Eigen3::Eigen
+  tracker
+  extended_kalman_filter
 )
+
+target_link_libraries(tracker
+  Eigen3::Eigen
+  extended_kalman_filter
+  gauss_newton_solver
+)
+
 
 
 # ============== 注册组件节点 =================
@@ -66,7 +112,7 @@ install(DIRECTORY include/
   DESTINATION include
 )
 
-install(TARGETS tracker_node
+install(TARGETS tracker_node tracker extended_kalman_filter gauss_newton_solver
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin

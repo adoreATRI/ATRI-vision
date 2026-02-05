@@ -1,6 +1,3 @@
-// Copyright (C) 2024 Zheng Yu
-// Licensed under the MIT License.
-
 #include "atri_detector/detector.hpp"
 
 namespace atri_detector
@@ -46,17 +43,19 @@ std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
   ColorBlock circle_block;
   findCircleColorBlock(contours, circle_block);
 
-  if (!circle_block.kpt.empty()) {
+  if (circle_block.kpt.size() == 5) {
     blocks.push_back(circle_block);
 
     // Find rectangle colorblocks
     findRectangleColorBlocks(contours, blocks);
 
     // Get Color Features
-    getColorFeatures(image, blocks);
+    if (blocks.size() > 1) {
+      getColorFeatures(image, blocks);
 
-    // Debug
-    drawDetectedBlocks(image, blocks);
+      // Debug
+      drawDetectedBlocks(image, blocks);
+    }
   }
 
   cv::imshow("debug", image);
@@ -120,7 +119,7 @@ void Detector::findCircleColorBlock(
   // 找到最大的圆形轮廓
   for (size_t i = 0; i < contours.size(); ++i) {
     double area = cv::contourArea(contours[i]);
-    if (area < 1000) {
+    if (area < 500) {
       continue;
     }
     if (calculateCircularity(contours[i])) {
@@ -186,7 +185,7 @@ void Detector::findRectangleColorBlocks(
     double area = cv::contourArea(contour);
     if (
       area < 100 || area > (cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1]) *
-                            cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1]) * 7)) {
+                            cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1]) * 10)) {
       continue;
     }
 
@@ -231,7 +230,7 @@ void Detector::findRectangleColorBlocks(
     }
 
     // 矩形到圆心距离
-    if (cv::norm(blocks[0].kpt[4] - center) > 5 * cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1])) {
+    if (cv::norm(blocks[0].kpt[4] - center) > 6 * cv::norm(blocks[0].kpt[4] - blocks[0].kpt[1])) {
       continue;
     }
 
@@ -271,31 +270,32 @@ void Detector::getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> &
     blocks[i].diff = 4.0 * (0.2f * ab_distance + 2.0f * 0.2f * h_distance +
                             2.0f * 0.3f * s_distance + 0.3f * gray_distance);
   }
+
+  // 按颜色特征差值从小到大排序
+  std::sort(blocks.begin() + 1, blocks.end(), [](const ColorBlock & a, const ColorBlock & b) {
+    return a.diff < b.diff;
+  });
 }
 
 void Detector::drawDetectedBlocks(cv::Mat & image, const std::vector<ColorBlock> & blocks)
 {
-  float min_diff = FLT_MAX;
-  int index = -1;
-
   for (size_t i = 1; i < blocks.size(); ++i) {
     for (size_t j = 0; j < 4; ++j) {
       cv::line(image, blocks[i].kpt[j], blocks[i].kpt[(j + 1) % 4], cv::Scalar(0, 255, 0), 2);
     }
-    if (blocks[i].diff < min_diff) {
-      min_diff = blocks[i].diff;
-      index = static_cast<int>(i);
-    }
+
     cv::putText(
       image, std::to_string(blocks[i].diff), blocks[i].kpt[4], cv::FONT_HERSHEY_SIMPLEX, 0.6,
       cv::Scalar(0, 0, 255), 3);
+    for (size_t k = 0; k < 4; ++k) {
+      cv::putText(
+        image, std::to_string(k), blocks[i].kpt[k], cv::FONT_HERSHEY_SIMPLEX, 0.6,
+        cv::Scalar(255, 0, 0), 2);
+    }
   }
 
-  if (index < 0) {
-    return;
-  }
   for (size_t k = 0; k < 4; ++k) {
-    cv::circle(image, blocks[index].kpt[k], 5, cv::Scalar(255, 255, 0), -1);
+    cv::circle(image, blocks[1].kpt[k], 5, cv::Scalar(255, 255, 0), -1);
   }
 }
 
