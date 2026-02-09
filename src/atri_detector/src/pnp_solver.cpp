@@ -18,10 +18,10 @@ PnPSolver::PnPSolver(
 
   // Model coordinate: x forward, y left, z up
   // Start from the point closest to the circle in clockwise order
-  block_points_.emplace_back(cv::Point3f(0, 0, -half_diagonal_length));
-  block_points_.emplace_back(cv::Point3f(0, half_diagonal_length, 0));
-  block_points_.emplace_back(cv::Point3f(0, 0, half_diagonal_length));
-  block_points_.emplace_back(cv::Point3f(0, -half_diagonal_length, 0));
+  block_points.emplace_back(cv::Point3f(0, 0, -half_diagonal_length));
+  block_points.emplace_back(cv::Point3f(0, half_diagonal_length, 0));
+  block_points.emplace_back(cv::Point3f(0, 0, half_diagonal_length));
+  block_points.emplace_back(cv::Point3f(0, -half_diagonal_length, 0));
 
   // Start from leftmost point in clockwise order
   circle_points_.emplace_back(cv::Point3f(0, circle_radius, 0));
@@ -44,9 +44,10 @@ bool PnPSolver::solvePnP(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tve
   image_block_points.emplace_back(cv::Point2f(block.kpt[3].x, block.kpt[3].y));
 
   // Solve pnp
+  // PnP解算方法：IPPE，ITERATIVE
   return cv::solvePnP(
-    block_points_, image_block_points, camera_matrix_, dist_coeffs_, rvec, tvec, false,
-    cv::SOLVEPNP_IPPE);
+    block_points, image_block_points, camera_matrix_, dist_coeffs_, rvec, tvec, false,
+    cv::SOLVEPNP_ITERATIVE);
 }
 
 bool PnPSolver::solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec)
@@ -65,6 +66,6 @@ bool PnPSolver::solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Ma
   // Solve pnp
   return cv::solvePnP(
     circle_points_, image_circle_points, camera_matrix_, dist_coeffs_, rvec, tvec, false,
-    cv::SOLVEPNP_IPPE);
+    cv::SOLVEPNP_ITERATIVE);
 }
 }  // namespace atri_detector

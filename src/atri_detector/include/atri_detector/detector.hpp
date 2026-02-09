@@ -1,6 +1,3 @@
-// Copyright (C) 2024 Zheng Yu
-// Licensed under the MIT License.
-
 #ifndef ATRI_DETECTOR__DETECTOR_HPP_
 #define ATRI_DETECTOR__DETECTOR_HPP_
 
@@ -37,6 +34,9 @@ public:
   // Find rectangle colorblocks
   void findRectangleColorBlocks(
     const std::vector<std::vector<cv::Point>> & contours, std::vector<ColorBlock> & blocks);
+
+  // Optimize detection
+  void optimizeDetection(cv::Mat & image, std::vector<ColorBlock> & blocks);
 
   // Get Color Features
   void getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> & blocks);

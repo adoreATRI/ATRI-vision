@@ -95,9 +95,11 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr block_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr center_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr measure_marker_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr measure_circle_marker_pub_;
   visualization_msgs::msg::Marker block_marker_;
   visualization_msgs::msg::Marker center_marker_;
   visualization_msgs::msg::Marker measure_marker_;
+  visualization_msgs::msg::Marker measure_circle_marker_;
 
   // EKF
   void initEKF();

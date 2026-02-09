@@ -1,5 +1,3 @@
-// Copyright (C) 2024 Zheng Yu
-// Licensed under the MIT License.
 #ifndef ATRI_DETECTOR__DETECTOR_NODE_HPP_
 #define ATRI_DETECTOR__DETECTOR_NODE_HPP_
 
@@ -23,6 +21,9 @@
 #include <std_msgs/msg/string.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
+// Eigen
+#include <Eigen/Dense>
+
 // STD
 #include <vector>
 
@@ -43,6 +44,8 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
   cv::Point2f camera_center_;
   std::shared_ptr<sensor_msgs::msg::CameraInfo> camera_info_;
+  cv::Mat camera_matrix;
+  cv::Mat dist_coeffs;
 
   // Image subscriber
   rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr image_sub_;

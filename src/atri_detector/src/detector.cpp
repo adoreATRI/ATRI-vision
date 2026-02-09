@@ -25,10 +25,10 @@ void Detector::InitHsvTuner()
   cv::createTrackbar("V Max", "debug_tuner", &v_max_, 255);
   cv::createTrackbar("Gray Min", "debug_tuner", &gray_min_, 1);
   cv::createTrackbar("Gray Max", "debug_tuner", &gray_max_, 255); */
-  /* cv::createTrackbar("AB Diff", "debug_tuner", &ab_diff_, 10);
+  cv::createTrackbar("AB Diff", "debug_tuner", &ab_diff_, 10);
   cv::createTrackbar("H Diff", "debug_tuner", &h_diff_, 10);
   cv::createTrackbar("S Diff", "debug_tuner", &s_diff_, 10);
-  cv::createTrackbar("Gray Diff", "debug_tuner", &gray_diff_, 10); */
+  cv::createTrackbar("Gray Diff", "debug_tuner", &gray_diff_, 10);
 }
 
 std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
@@ -48,6 +48,9 @@ std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
 
     // Find rectangle colorblocks
     findRectangleColorBlocks(contours, blocks);
+
+    // Optimize
+    optimizeDetection(image, blocks);
 
     // Get Color Features
     if (blocks.size() > 1) {
@@ -133,7 +136,7 @@ void Detector::findCircleColorBlock(
   }
 
   // 确定圆形色块存在后，找到关键点
-  if (index_of_circle >= 0) {
+  /* if (index_of_circle >= 0) {
     cv::Moments m = cv::moments(contours[index_of_circle]);
     if (m.m00 > 1e-6) {
       circle_center =
@@ -171,6 +174,22 @@ void Detector::findCircleColorBlock(
     std::vector<cv::Point2f> circle_kpt = {left, top, right, bottom};
     circle_block.kpt = circle_kpt;
     circle_block.kpt.push_back(circle_center);
+  */
+
+  // 用椭圆拟合找关键点
+  if (index_of_circle >= 0 && contours[index_of_circle].size() >= 5) {
+    cv::RotatedRect ellipse = cv::fitEllipse(contours[index_of_circle]);
+    cv::Point2f center = ellipse.center;
+    float a = ellipse.size.width / 2;
+    float b = ellipse.size.height / 2;
+    float angle_rad = ellipse.angle * CV_PI / 180.0;
+
+    cv::Point2f left = center + cv::Point2f(a * cos(angle_rad), a * sin(angle_rad));
+    cv::Point2f right = center - cv::Point2f(a * cos(angle_rad), a * sin(angle_rad));
+    cv::Point2f top = center + cv::Point2f(-b * sin(angle_rad), b * cos(angle_rad));
+    cv::Point2f bottom = center - cv::Point2f(-b * sin(angle_rad), b * cos(angle_rad));
+
+    circle_block.kpt = {left, top, right, bottom, center};
   }
 }
 
@@ -234,12 +253,32 @@ void Detector::findRectangleColorBlocks(
       continue;
     }
 
+    // 包装block
     ColorBlock block;
     std::vector<cv::Point2f> kpt;
     sortCorners(blocks[0].kpt[4], corners);
     block.kpt = corners;
     block.kpt.push_back(center);
     blocks.push_back(block);
+  }
+}
+
+void Detector::optimizeDetection(cv::Mat & image, std::vector<ColorBlock> & blocks)
+{
+  cv::Mat image_gray;
+  cv::cvtColor(image, image_gray, cv::COLOR_BGR2GRAY);
+
+  for (size_t i = 1; i < blocks.size(); ++i) {
+    std::vector<cv::Point2f> corners;
+    for (size_t j = 0; j < 4; ++j) {
+      corners.push_back(blocks[i].kpt[j]);
+    }
+    cv::cornerSubPix(
+      image_gray, corners, cv::Size(5, 5), cv::Size(-1, -1),
+      cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 30, 0.01));
+    for (size_t j = 0; j < 4; ++j) {
+      blocks[i].kpt[j] = corners[j];
+    }
   }
 }
 
@@ -267,8 +306,14 @@ void Detector::getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> &
     s_distance = std::abs(s_circle - s_value);
     gray_distance = std::abs(gray_circle - gray_value);
 
-    blocks[i].diff = 4.0 * (0.2f * ab_distance + 2.0f * 0.2f * h_distance +
-                            2.0f * 0.3f * s_distance + 0.3f * gray_distance);
+    blocks[i].diff = 2.0 * (2.0f * 0.4f * ab_distance + 0.1f * h_distance + 0.4f * s_distance +
+                            0.1f * gray_distance);
+
+    // Debug
+    /*     blocks[i].diff = 2.0 * (2.0f * static_cast<float>(ab_diff_) / 10 * ab_distance +
+                            static_cast<float>(h_diff_) / 10 * h_distance +
+                            static_cast<float>(s_diff_) / 10 * s_distance +
+                            static_cast<float>(gray_diff_) / 10 * gray_distance); */
   }
 
   // 按颜色特征差值从小到大排序

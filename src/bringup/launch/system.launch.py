@@ -19,7 +19,6 @@ def generate_launch_description():
         executable='component_container_mt',
         output='screen',
         composable_node_descriptions=[
-
             ComposableNode(
                 package='usb_camera_driver',
                 plugin='usb_camera_driver::CameraCaptureNode',
@@ -41,4 +40,26 @@ def generate_launch_description():
         ]
     )
 
-    return LaunchDescription([container])
+    return LaunchDescription([
+            Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                name='odom_to_base',
+                arguments=['0', '0', '0', '0', '0', '0', 'odom', 'base_link']
+            ),
+
+            Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                name='base_to_camera',
+                arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'camera_link']
+            ),
+                       
+            Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                name='camera_to_optical',
+                arguments=['0', '0', '0', '-1.5708', '0', '-1.5708', 'camera_link', 'camera_optical_frame']
+            ),
+           
+            container])

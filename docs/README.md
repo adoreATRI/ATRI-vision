@@ -1,7 +1,7 @@
 ## 仿真器的使用
 运行
 ```bash
-/usr/bin/env python3 /home/adore/ATRI_vision/src/simulator/buff_simulator.py
+/usr/bin/env python3 ./src/simulator/buff_simulator.py
 ```
 
 ## ATRI_vision编译和运行

@@ -21,6 +21,7 @@ public:
     const std::vector<double> & distortion_coefficients);
 
   bool solvePnP(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec);
+  std::vector<cv::Point3f> block_points;
   bool solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec);
 
 private:
@@ -28,7 +29,6 @@ private:
   static constexpr float DIAGONAL_LENGTH = 133.13;
   static constexpr float CIRCLE_RADIUS = 40.0;
 
-  std::vector<cv::Point3f> block_points_;
   std::vector<cv::Point3f> circle_points_;
   cv::Mat camera_matrix_;
   cv::Mat dist_coeffs_;
