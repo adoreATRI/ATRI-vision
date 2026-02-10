@@ -112,8 +112,8 @@ void DetectorNode::imageCallback(const sensor_msgs::msg::CompressedImage::ConstS
           }
 
           // 加权融合
-          double weight_2d = 0.3;
-          double weight_rect = 0.7;
+          double weight_2d = 0.4;
+          double weight_rect = 0.6;
           Eigen::Vector3d center_fused =
             weight_2d * center_from_2d + weight_rect * center_from_rect;
 

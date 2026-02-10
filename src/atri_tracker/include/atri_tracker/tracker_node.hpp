@@ -46,7 +46,7 @@ public:
 
 private:
   void colorBlockCallback(const atri_interfaces::msg::ColorBlockArray::SharedPtr color_block_msg);
-  double dt_;
+  double dt_ = 0.01;
 
   rclcpp::Time last_time_;
 
@@ -61,6 +61,8 @@ private:
   double s2qr_;
   double r_block_;
   double r_center_;
+  double r_block_min_;
+  double r_center_min_;
 
   // GNS Params
   double min_a_;

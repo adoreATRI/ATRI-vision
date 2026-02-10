@@ -11,11 +11,12 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
   // Parameters
   target_frame_ = this->declare_parameter("target_frame", "odom");
   double max_match_theta = this->declare_parameter("tracker.max_match_theta", 0.314);
-  double max_match_center_xoy = this->declare_parameter("tracker.max_match_center_xoy", 5.0);
+  double max_match_center_xoy = this->declare_parameter("tracker.max_match_center_xoy", 3.0);
   lost_time_threshold_ = this->declare_parameter("tracker.lost_time_threshold", 0.5);
 
   tracker_ = std::make_unique<Tracker>(max_match_theta, max_match_center_xoy);
-  tracker_->tracking_threshold = this->declare_parameter("tracker.tracking_threshold", 4);
+  tracker_->tracking_threshold = this->declare_parameter("tracker.tracking_threshold", 10);
+  tracker_->ema_alpha_ = this->declare_parameter("tracker.ema_alpha", 0.1);
 
   // Visualization initialize
   initVisualization();
@@ -305,7 +306,7 @@ void TrackerNode::initEKF()
 
     z(0) = xc + r * (ct * u.x() + st * v.x());
     z(1) = yc + r * (ct * u.y() + st * v.y());
-    z(2) = zc + r * (ct * u.z());  // v.z() == 0
+    z(2) = zc + r * (ct * u.z() + st * v.z());
     z(3) = theta;
     return z;
   };
@@ -320,7 +321,7 @@ void TrackerNode::initEKF()
     // clang-format off
     H <<  1, 0, 0, 0, 0, 0,  ct*u.x()+st*v.x(),  r*(-st*u.x()+ct*v.x()), 0,
           0, 1, 0, 0, 0, 0,  ct*u.y()+st*v.y(),  r*(-st*u.y()+ct*v.y()), 0,
-          0, 0, 1, 0, 0, 0,  ct*u.z(),           -r*st*u.z(),             0,
+          0, 0, 1, 0, 0, 0,  ct*u.z()+st*v.z(),  r*(-st*u.z()+ct*v.z()), 0,
           0, 0, 0, 0, 0, 0,  0,                   1,                      0;
     // clang-format on
     return H;
@@ -361,11 +362,16 @@ void TrackerNode::initEKF()
   // update_R - measurement noise covariance matrix
   r_block_ = declare_parameter("ekf.r_block", 1e-8);
   r_center_ = declare_parameter("ekf.r_center", 1e-8);
+  r_block_min_ = declare_parameter("ekf.r_block_min", 1e-4);
+  r_center_min_ = declare_parameter("ekf.r_center_min", 1e-4);
   auto u_r = [this](const Eigen::VectorXd & z) {
     Eigen::DiagonalMatrix<double, 4> r;
     double xb = r_block_;
     double xc = r_center_;
-    r.diagonal() << abs(xb * z(0)), abs(xb * z(1)), abs(xb * z(2)), abs(xc * z(3));
+    r.diagonal() << std::max(abs(xb * z(0)), r_block_min_),
+                     std::max(abs(xb * z(1)), r_block_min_),
+                     std::max(abs(xb * z(2)), r_block_min_),
+                     std::max(abs(xc * z(3)), r_center_min_);
     return r;
   };
   // P - error estimate covariance matrix
@@ -458,7 +464,9 @@ void TrackerNode::initGNS()
   r_c_ = declare_parameter("ekf_gns.r_c", 1e-8);
   auto u_r_gns = [this](const Eigen::VectorXd & z) {
     Eigen::DiagonalMatrix<double, 3> r;
-    r.diagonal() << abs(r_a_ * z(0)), abs(r_w_ * z(1)), abs(r_c_ * z(2));
+    r.diagonal() << std::max(abs(r_a_ * z(0)), 1e-4),
+                     std::max(abs(r_w_ * z(1)), 1e-4),
+                     std::max(abs(r_c_ * z(2)), 1e-4);
     return r;
   };
   // P - error estimate covariance matrix

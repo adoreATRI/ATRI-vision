@@ -354,7 +354,7 @@ bool Detector::calculateCircularity(const std::vector<cv::Point> & contour)
   }
 
   double circularity = (4.0 * CV_PI * area) / (perimeter * perimeter);
-  return circularity > 0.85;
+  return circularity > 0.8;
 }
 
 bool Detector::isPointNearLine(
