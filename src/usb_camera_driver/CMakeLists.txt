@@ -21,6 +21,15 @@ add_library(camera_capture_node SHARED
   src/camera_capture_node.cpp
 )
 
+# ================= 链接头文件 =================
+include_directories(include)
+
+target_include_directories(camera_capture_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+
 # ================= 链接ros依赖 =================
 ament_target_dependencies(camera_capture_node
   rclcpp

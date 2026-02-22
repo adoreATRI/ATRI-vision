@@ -18,6 +18,8 @@ find_package(atri_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(angles REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -68,6 +70,7 @@ geometry_msgs
 tf2_geometry_msgs
 tf2_ros
 visualization_msgs
+ament_index_cpp
 )
 
 ament_target_dependencies(tracker
@@ -91,6 +94,7 @@ target_link_libraries(tracker_node
   Eigen3::Eigen
   tracker
   extended_kalman_filter
+  yaml-cpp
 )
 
 target_link_libraries(tracker

@@ -16,11 +16,20 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(atri_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 
 find_package(OpenCV REQUIRED)
+
+# ==================== ONNX Runtime ====================
+set(ONNXRUNTIME_DIR $ENV{ONNXRUNTIME_HOME})
+find_path(ONNXRUNTIME_INCLUDE_DIR "onnxruntime_cxx_api.h" HINTS ${ONNXRUNTIME_DIR}/include)
+find_library(ONNXRUNTIME_LIB onnxruntime HINTS ${ONNXRUNTIME_DIR}/lib)
+find_library(ONNXRUNTIME_CUDA_LIB onnxruntime_providers_cuda HINTS ${ONNXRUNTIME_DIR}/lib)
+find_library(ONNXRUNTIME_SHARED_LIB onnxruntime_providers_shared HINTS ${ONNXRUNTIME_DIR}/lib)
 
 # ================= 创建共享库 =================
 add_library(detector_node SHARED
@@ -30,7 +39,9 @@ add_library(detector_node SHARED
 add_library(detector SHARED
   src/detector.cpp
   src/pnp_solver.cpp
+  src/onnx_inference.cpp
 )
+
 
   
 # ================= 设置头文件目录 =================
@@ -42,8 +53,16 @@ target_include_directories(detector_node PUBLIC
 )
 
 target_include_directories(detector PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+$<INSTALL_INTERFACE:include>
+)
+
+
+target_include_directories(detector_node SYSTEM PRIVATE
+  ${ONNXRUNTIME_INCLUDE_DIR}
+)
+target_include_directories(detector SYSTEM PRIVATE
+  ${ONNXRUNTIME_INCLUDE_DIR}
 )
 
 
@@ -58,6 +77,7 @@ atri_interfaces
 geometry_msgs
 tf2_geometry_msgs
 tf2_ros
+ament_index_cpp
 )
 
 ament_target_dependencies(detector
@@ -69,11 +89,15 @@ geometry_msgs
 # =============== 链接库 ================
 target_link_libraries(detector_node
   detector
-  ${OpenCV_LIBS}
+  yaml-cpp
 )
 
 target_link_libraries(detector
   ${OpenCV_LIBS}
+  ${ONNXRUNTIME_LIB}
+  ${ONNXRUNTIME_CUDA_LIB}
+  ${ONNXRUNTIME_SHARED_LIB}
+  yaml-cpp
 )
 
 

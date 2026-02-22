@@ -14,7 +14,6 @@ PnPSolver::PnPSolver(
 {
   // Unit: m
   constexpr double half_diagonal_length = DIAGONAL_LENGTH / 2 / 1000;
-  constexpr double circle_radius = CIRCLE_RADIUS / 1000;
 
   // Model coordinate: x forward, y left, z up
   // Start from the point closest to the circle in clockwise order
@@ -24,10 +23,10 @@ PnPSolver::PnPSolver(
   block_points.emplace_back(cv::Point3f(0, -half_diagonal_length, 0));
 
   // Start from leftmost point in clockwise order
-  circle_points_.emplace_back(cv::Point3f(0, circle_radius, 0));
+  /*   circle_points_.emplace_back(cv::Point3f(0, circle_radius, 0));
   circle_points_.emplace_back(cv::Point3f(0, 0, circle_radius));
   circle_points_.emplace_back(cv::Point3f(0, -circle_radius, 0));
-  circle_points_.emplace_back(cv::Point3f(0, 0, -circle_radius));
+  circle_points_.emplace_back(cv::Point3f(0, 0, -circle_radius)); */
 }
 
 bool PnPSolver::solvePnP(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec)
@@ -50,7 +49,7 @@ bool PnPSolver::solvePnP(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tve
     cv::SOLVEPNP_ITERATIVE);
 }
 
-bool PnPSolver::solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec)
+/* bool PnPSolver::solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec)
 {
   std::vector<cv::Point2f> image_circle_points;
 
@@ -67,5 +66,5 @@ bool PnPSolver::solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Ma
   return cv::solvePnP(
     circle_points_, image_circle_points, camera_matrix_, dist_coeffs_, rvec, tvec, false,
     cv::SOLVEPNP_ITERATIVE);
-}
+} */
 }  // namespace atri_detector

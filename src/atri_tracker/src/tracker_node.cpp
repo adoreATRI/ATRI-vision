@@ -8,15 +8,20 @@ namespace atri_tracker
 
 TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_tracker", options)
 {
+  // Yaml
+  const std::string config_path = ament_index_cpp::get_package_share_directory("atri_tracker") +
+                                  "/../../../../src/bringup/config/config.yaml";
+  YAML::Node cfg = YAML::LoadFile(config_path);
+
   // Parameters
   target_frame_ = this->declare_parameter("target_frame", "odom");
   double max_match_theta = this->declare_parameter("tracker.max_match_theta", 0.314);
-  double max_match_center_xoy = this->declare_parameter("tracker.max_match_center_xoy", 3.0);
+  double max_match_center_xoy = this->declare_parameter(
+    "tracker.max_match_center_xoy", cfg["tracker"]["max_match_center_xoy"].as<double>());
   lost_time_threshold_ = this->declare_parameter("tracker.lost_time_threshold", 0.5);
 
   tracker_ = std::make_unique<Tracker>(max_match_theta, max_match_center_xoy);
   tracker_->tracking_threshold = this->declare_parameter("tracker.tracking_threshold", 10);
-  tracker_->ema_alpha_ = this->declare_parameter("tracker.ema_alpha", 0.1);
 
   // Visualization initialize
   initVisualization();
@@ -37,9 +42,6 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
     this->create_publisher<visualization_msgs::msg::Marker>("tracker/center_marker", 10);
   measure_marker_pub_ =
     this->create_publisher<visualization_msgs::msg::Marker>("tracker/measure_marker", 10);
-  measure_circle_marker_pub_ =
-    this->create_publisher<visualization_msgs::msg::Marker>("tracker/measure_circle_marker", 10);
-  pnp_result_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("/debug/atri_pnp", 10);
 
   // Subscriber with tf2 message_filter
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -57,6 +59,10 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
 void TrackerNode::colorBlockCallback(
   const atri_interfaces::msg::ColorBlockArray::SharedPtr color_block_msg)
 {
+  if (color_block_msg->color_blocks.size() < 1) {
+    return;
+  }
+
   for (auto & color_block : color_block_msg->color_blocks) {
     geometry_msgs::msg::TransformStamped transform_stamped;
     try {
@@ -77,24 +83,13 @@ void TrackerNode::colorBlockCallback(
   atri_interfaces::msg::Rune rune_msg;
   rune_msg.header.stamp = time;
   rune_msg.header.frame_id = target_frame_;
-  geometry_msgs::msg::PoseArray pnp_result_msg;
-  pnp_result_msg.header = rune_msg.header;
 
   measure_marker_.header.stamp = time;
-  measure_circle_marker_.header.stamp = time;
 
-  if (color_block_msg->color_blocks.size() > 1) {
-    measure_marker_.pose.position.x = color_block_msg->color_blocks[1].pose.position.x;
-    measure_marker_.pose.position.y = color_block_msg->color_blocks[1].pose.position.y;
-    measure_marker_.pose.position.z = color_block_msg->color_blocks[1].pose.position.z;
-    measure_marker_pub_->publish(measure_marker_);
-    measure_circle_marker_.pose.position.x = color_block_msg->color_blocks[0].pose.position.x;
-    measure_circle_marker_.pose.position.y = color_block_msg->color_blocks[0].pose.position.y;
-    measure_circle_marker_.pose.position.z = color_block_msg->color_blocks[0].pose.position.z;
-    measure_circle_marker_pub_->publish(measure_circle_marker_);
-    pnp_result_msg.poses.push_back(color_block_msg->color_blocks[1].pose);
-    pnp_result_pub_->publish(pnp_result_msg);
-  }
+  measure_marker_.pose.position.x = color_block_msg->color_blocks[0].pose.position.x;
+  measure_marker_.pose.position.y = color_block_msg->color_blocks[0].pose.position.y;
+  measure_marker_.pose.position.z = color_block_msg->color_blocks[0].pose.position.z;
+  measure_marker_pub_->publish(measure_marker_);
 
   if (tracker_->tracker_state == Tracker::State::LOST) {
     tracker_->init(color_block_msg);
@@ -103,7 +98,6 @@ void TrackerNode::colorBlockCallback(
     dt_ = (time - last_time_).seconds();
     tracker_->lost_threshold = static_cast<int>(lost_time_threshold_ / dt_);
     tracker_->update(color_block_msg);
-
     tracker_->solve(time);
 
     // Publish rune
@@ -221,20 +215,6 @@ void TrackerNode::initVisualization()
   measure_marker_.color.g = 0.0;
   measure_marker_.color.b = 1.0;
   measure_marker_.color.a = 1.0;
-
-  measure_circle_marker_ = visualization_msgs::msg::Marker();
-  measure_circle_marker_.header.frame_id = target_frame_;
-  measure_circle_marker_.ns = "measure_circle";
-  measure_circle_marker_.id = 0;
-  measure_circle_marker_.type = visualization_msgs::msg::Marker::SPHERE;
-  measure_circle_marker_.action = visualization_msgs::msg::Marker::ADD;
-  measure_circle_marker_.scale.x = 0.1;
-  measure_circle_marker_.scale.y = 0.1;
-  measure_circle_marker_.scale.z = 0.1;
-  measure_circle_marker_.color.r = 1.0;
-  measure_circle_marker_.color.g = 0.0;
-  measure_circle_marker_.color.b = 1.0;
-  measure_circle_marker_.color.a = 1.0;
 }
 
 void TrackerNode::initEKF()
@@ -266,37 +246,6 @@ void TrackerNode::initEKF()
     return f;
   };
 
-  /*   // h - Observation function
-  auto h = [](const Eigen::VectorXd & x) {
-    Eigen::VectorXd z(4);
-    double xc = x(0), yc = x(1), zc = x(2), r = x(6), theta = x(7);
-    double st = sin(theta), ct = cos(theta);
-    double dn_sq = std::max(xc * xc + yc * yc, 1e-10);
-    double dn_1_2 = pow(dn_sq, -0.5);
-
-    z(0) = xc + r * (st * yc * dn_1_2);
-    z(1) = yc + r * (-st * xc * dn_1_2);
-    z(2) = zc + r * ct;
-    z(3) = theta;
-    return z;
-  };
-  // J_h - Jacobian of observation function
-  auto j_h = [](const Eigen::VectorXd & x) {
-    Eigen::MatrixXd h(4, 9);
-    double xc = x(0), yc = x(1), r = x(6), theta = x(7);
-    double st = sin(theta), ct = cos(theta);
-    double dn_sq = std::max(xc * xc + yc * yc, 1e-10);
-    double dn_1_2 = pow(dn_sq, -0.5);
-    double dn_3_2 = pow(dn_sq, -1.5);
-    // clang-format off
-    //    x                      y                      z    v_x  v_y  v_z  r                theta            omega
-    h <<  1-r*xc*yc*st*dn_3_2,   r*xc*xc*st*dn_3_2,     0,   0,   0,   0,   yc*st*dn_1_2,    yc*ct*dn_1_2,    0,
-          -r*yc*yc*st*dn_3_2,    1+r*xc*yc*st*dn_3_2,   0,   0,   0,   0,   -xc*st*dn_1_2,   -xc*ct*dn_1_2,   0,
-          0,                     0,                     1,   0,   0,   0,   ct,              -r*st,           0,
-          0,                     0,                     0,   0,   0,   0,   0,               1,               0;
-    // clang-format on
-    return h;
-  }; */
   auto h = [this](const Eigen::VectorXd & x) {
     Eigen::VectorXd z(4);
     double xc = x(0), yc = x(1), zc = x(2), r = x(6), theta = x(7);
@@ -333,10 +282,7 @@ void TrackerNode::initEKF()
   s2qr_ = declare_parameter("ekf.sigma2_q_r", 80.0);
   auto u_q = [this]() {
     Eigen::MatrixXd q(9, 9);
-    // double t = dt_, x = s2qxyz_, y = s2qyaw_, r = s2qr_;
-    // double q_x_x = pow(t, 4) / 4 * x, q_x_vx = pow(t, 3) / 2 * x, q_vx_vx =
-    // pow(t, 2) * x; double q_y_y = pow(t, 4) / 4 * y, q_y_vy = pow(t, 3) / 2 *
-    // x, q_vy_vy = pow(t, 2) * y; double q_r = pow(t, 4) / 4 * r;
+    
     double t = dt_;
     double x = s2qxyz_, y = s2qxyz_, z = s2qxyz_, theta = s2qtheta_, r = s2qr_;
     double q_x_x = pow(t, 4) / 4 * x, q_x_vx = pow(t, 3) / 2 * x, q_vx_vx = pow(t, 2) * x;

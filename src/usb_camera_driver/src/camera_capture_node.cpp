@@ -1,427 +1,367 @@
-#include <fcntl.h>
-#include <linux/videodev2.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
-#include <atomic>
-#include <chrono>
-#include <mutex>
-#include <thread>
-#include <vector>
-
-#include "camera_info_manager/camera_info_manager.hpp"
-#include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/msg/camera_info.hpp"
-#include "sensor_msgs/msg/compressed_image.hpp"
+#include "usb_camera_driver/camera_capture_node.hpp"
 
 namespace usb_camera_driver
 {
-class CameraCaptureNode : public rclcpp::Node
+
+CameraCaptureNode::CameraCaptureNode(const rclcpp::NodeOptions & options)
+: Node("camera_capture_node", options)
 {
-public:
-  explicit CameraCaptureNode(const rclcpp::NodeOptions & options)
-  : Node("camera_capture_node", options)
-  {
-    RCLCPP_INFO(this->get_logger(), "CameraCaptureNode started.");
+  RCLCPP_INFO(this->get_logger(), "CameraCaptureNode started.");
 
-    camera_name_ = this->declare_parameter("camera_name", "usb_camera");
-    camera_device_url_ = this->declare_parameter(
-      "camera_device_v4l_url", "/dev/v4l/by-id/usb-RYS_USB_Camera_200901010001-video-index0");
-    auto camera_info_url =
-      this->declare_parameter("camera_info_url", "package://bringup/config/camera_params.yaml");
-    camera_info_manager_ =
-      std::make_unique<camera_info_manager::CameraInfoManager>(this, camera_name_);
+  camera_name_ = this->declare_parameter("camera_name", "usb_camera");
+  camera_device_url_ = this->declare_parameter(
+    "camera_device_v4l_url", "/dev/v4l/by-id/usb-RYS_USB_Camera_200901010001-video-index0");
+  auto camera_info_url =
+    this->declare_parameter("camera_info_url", "package://bringup/config/camera_params.yaml");
+  camera_info_manager_ =
+    std::make_unique<camera_info_manager::CameraInfoManager>(this, camera_name_);
 
-    if (camera_info_manager_->validateURL(camera_info_url)) {
-      camera_info_manager_->loadCameraInfo(camera_info_url);
-      camera_info_msg_ = camera_info_manager_->getCameraInfo();
-      RCLCPP_INFO(this->get_logger(), "Loaded camera info from: %s", camera_info_url.c_str());
-    } else {
-      RCLCPP_WARN(this->get_logger(), "Invalid camera info URL: %s", camera_info_url.c_str());
-    }
-
-    image_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>(
-      "image_compressed", rclcpp::SensorDataQoS());
-    camera_info_pub_ =
-      this->create_publisher<sensor_msgs::msg::CameraInfo>("camera_info", rclcpp::SensorDataQoS());
-
-    img_width_ = this->declare_parameter("image_width", 1280);
-    img_height_ = this->declare_parameter("image_height", 720);
-
-    declareParameters();
-
-    params_callback_handle_ = this->add_on_set_parameters_callback(
-      std::bind(&CameraCaptureNode::parametersCallback, this, std::placeholders::_1));
-
-    RCLCPP_INFO(this->get_logger(), "Starting capture thread...");
-    running_ = true;
-    capture_thread_ = std::thread(&CameraCaptureNode::captureLoop, this);
+  // Load camera info from URL
+  if (camera_info_manager_->validateURL(camera_info_url)) {
+    camera_info_manager_->loadCameraInfo(camera_info_url);
+    camera_info_msg_ = camera_info_manager_->getCameraInfo();
+    RCLCPP_INFO(this->get_logger(), "Loaded camera info from: %s", camera_info_url.c_str());
+  } else {
+    RCLCPP_WARN(this->get_logger(), "Invalid camera info URL: %s", camera_info_url.c_str());
   }
 
-  ~CameraCaptureNode()
-  {
-    RCLCPP_INFO(this->get_logger(), "Shutting down CameraCaptureNode...");
+  // Create publishers
+  image_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>(
+    "image_compressed", rclcpp::SensorDataQoS());
+  camera_info_pub_ =
+    this->create_publisher<sensor_msgs::msg::CameraInfo>("camera_info", rclcpp::SensorDataQoS());
 
-    running_ = false;
+  img_width_ = this->declare_parameter("image_width", 1280);
+  img_height_ = this->declare_parameter("image_height", 720);
 
-    if (capture_thread_.joinable()) {
-      capture_thread_.join();
-    }
+  declareParameters();
 
-    closeCameraV4L2();
+  // Parameter callback
+  params_callback_handle_ = this->add_on_set_parameters_callback(
+    std::bind(&CameraCaptureNode::parametersCallback, this, std::placeholders::_1));
 
-    RCLCPP_INFO(this->get_logger(), "CameraCaptureNode shut down complete.");
+  // Capture thread
+  RCLCPP_INFO(this->get_logger(), "Starting capture thread...");
+  running_ = true;
+  capture_thread_ = std::thread(&CameraCaptureNode::captureLoop, this);
+}
+
+CameraCaptureNode::~CameraCaptureNode()
+{
+  RCLCPP_INFO(this->get_logger(), "Shutting down CameraCaptureNode...");
+
+  running_ = false;
+
+  if (capture_thread_.joinable()) {
+    capture_thread_.join();
   }
 
-private:
-  struct V4L2Buffer
-  {
-    void * start{nullptr};
-    size_t length{0};
-  };
+  closeCameraV4L2();
 
-  bool openCameraV4L2()
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
+  RCLCPP_INFO(this->get_logger(), "CameraCaptureNode shut down complete.");
+}
 
-    v4l2_fd_ = open(camera_device_url_.c_str(), O_RDWR | O_NONBLOCK);
-    if (v4l2_fd_ < 0) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to open camera: %s", camera_device_url_.c_str());
-      return false;
-    }
+bool CameraCaptureNode::openCameraV4L2()
+{
+  std::lock_guard<std::mutex> lock(mutex_);
 
-    struct V4L2Buffer
-    {
-      void * start;
-      size_t length;
-    };
+  v4l2_fd_ = open(camera_device_url_.c_str(), O_RDWR | O_NONBLOCK);
+  if (v4l2_fd_ < 0) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to open camera: %s", camera_device_url_.c_str());
+    return false;
+  }
 
-    // 设置视频格式
-    struct v4l2_format fmt = {};
-    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    fmt.fmt.pix.width = img_width_;
-    fmt.fmt.pix.height = img_height_;
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
-    fmt.fmt.pix.field = V4L2_FIELD_NONE;
+  // set video format
+  struct v4l2_format fmt = {};
+  fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  fmt.fmt.pix.width = img_width_;
+  fmt.fmt.pix.height = img_height_;
+  fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+  fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-    if (ioctl(v4l2_fd_, VIDIOC_S_FMT, &fmt) < 0) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to set video format");
-      close(v4l2_fd_);
-      v4l2_fd_ = -1;
-      return false;
-    }
+  if (ioctl(v4l2_fd_, VIDIOC_S_FMT, &fmt) < 0) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to set video format");
+    close(v4l2_fd_);
+    v4l2_fd_ = -1;
+    return false;
+  }
 
-    struct v4l2_streamparm parm = {};
-    parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    parm.parm.capture.timeperframe.numerator = 1;
-    parm.parm.capture.timeperframe.denominator = frame_rate_.load();
-    if (ioctl(v4l2_fd_, VIDIOC_S_PARM, &parm) < 0) {
-      RCLCPP_WARN(this->get_logger(), "Failed to set frame rate to %d", frame_rate_.load());
-    }
+  struct v4l2_streamparm parm = {};
+  parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  parm.parm.capture.timeperframe.numerator = 1;
+  parm.parm.capture.timeperframe.denominator = frame_rate_.load();
+  if (ioctl(v4l2_fd_, VIDIOC_S_PARM, &parm) < 0) {
+    RCLCPP_WARN(this->get_logger(), "Failed to set frame rate to %d", frame_rate_.load());
+  }
 
-    applyV4L2Controls();
+  applyV4L2Controls();
 
-    // 申请并映射缓冲区
-    struct v4l2_requestbuffers req = {};
-    req.count = 4;
-    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    req.memory = V4L2_MEMORY_MMAP;
+  // request buffers
+  struct v4l2_requestbuffers req = {};
+  req.count = 4;
+  req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  req.memory = V4L2_MEMORY_MMAP;
 
-    if (ioctl(v4l2_fd_, VIDIOC_REQBUFS, &req) < 0) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to request buffers");
-      close(v4l2_fd_);
-      v4l2_fd_ = -1;
-      return false;
-    }
+  if (ioctl(v4l2_fd_, VIDIOC_REQBUFS, &req) < 0) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to request buffers");
+    close(v4l2_fd_);
+    v4l2_fd_ = -1;
+    return false;
+  }
 
-    v4l2_buffers_.resize(req.count);
-    for (unsigned int i = 0; i < req.count; ++i) {
-      struct v4l2_buffer buf = {};
-      buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-      buf.memory = V4L2_MEMORY_MMAP;
-      buf.index = i;
+  v4l2_buffers_.resize(req.count);
+  for (unsigned int i = 0; i < req.count; ++i) {
+    struct v4l2_buffer buf = {};
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+    buf.index = i;
 
-      if (ioctl(v4l2_fd_, VIDIOC_QUERYBUF, &buf) < 0) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to query buffer %d", i);
-        closeCameraV4L2();
-        return false;
-      }
-
-      v4l2_buffers_[i].length = buf.length;
-      v4l2_buffers_[i].start =
-        mmap(nullptr, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, v4l2_fd_, buf.m.offset);
-
-      if (v4l2_buffers_[i].start == MAP_FAILED) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to mmap buffer %d", i);
-        closeCameraV4L2();
-        return false;
-      }
-    }
-
-    for (unsigned int i = 0; i < req.count; ++i) {
-      struct v4l2_buffer buf = {};
-      buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-      buf.memory = V4L2_MEMORY_MMAP;
-      buf.index = i;
-
-      if (ioctl(v4l2_fd_, VIDIOC_QBUF, &buf) < 0) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to queue buffer %d", i);
-        closeCameraV4L2();
-        return false;
-      }
-    }
-
-    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    if (ioctl(v4l2_fd_, VIDIOC_STREAMON, &type) < 0) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to start stream");
+    if (ioctl(v4l2_fd_, VIDIOC_QUERYBUF, &buf) < 0) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to query buffer %d", i);
       closeCameraV4L2();
       return false;
     }
 
-    return true;
-  }
+    v4l2_buffers_[i].length = buf.length;
+    v4l2_buffers_[i].start =
+      mmap(nullptr, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, v4l2_fd_, buf.m.offset);
 
-  void closeCameraV4L2()
-  {
-    if (v4l2_fd_ >= 0) {
-      enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-      ioctl(v4l2_fd_, VIDIOC_STREAMOFF, &type);
-
-      for (auto & buf : v4l2_buffers_) {
-        if (buf.start != MAP_FAILED && buf.start != nullptr) {
-          munmap(buf.start, buf.length);
-        }
-      }
-      v4l2_buffers_.clear();
-
-      close(v4l2_fd_);
-      v4l2_fd_ = -1;
+    if (v4l2_buffers_[i].start == MAP_FAILED) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to mmap buffer %d", i);
+      closeCameraV4L2();
+      return false;
     }
   }
 
-  bool setV4L2Control(int id, int value)
-  {
-    struct v4l2_control ctrl = {};
-    ctrl.id = id;
-    ctrl.value = value;
-    return ioctl(v4l2_fd_, VIDIOC_S_CTRL, &ctrl) >= 0;
-  }
+  for (unsigned int i = 0; i < req.count; ++i) {
+    struct v4l2_buffer buf = {};
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+    buf.index = i;
 
-  void applyV4L2Controls()
-  {
-    if (exposure_time_mode_.load() == 0) {
-      setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 1);
-      setV4L2Control(V4L2_CID_EXPOSURE_ABSOLUTE, exposure_time_.load());
-    } else {
-      setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 3);
+    if (ioctl(v4l2_fd_, VIDIOC_QBUF, &buf) < 0) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to queue buffer %d", i);
+      closeCameraV4L2();
+      return false;
     }
-
-    setV4L2Control(V4L2_CID_BRIGHTNESS, brightness_.load());
-    setV4L2Control(V4L2_CID_CONTRAST, contrast_.load());
-    setV4L2Control(V4L2_CID_SATURATION, saturation_.load());
   }
 
-  void declareParameters()
-  {
-    rcl_interfaces::msg::ParameterDescriptor param_desc;
-    param_desc.integer_range.resize(1);
-    param_desc.integer_range[0].step = 1;
-
-    param_desc.description = "Frame rate (FPS)";
-    param_desc.integer_range[0].from_value = 1;
-    param_desc.integer_range[0].to_value = 60;
-    frame_rate_ = this->declare_parameter("frame_rate", 60, param_desc);
-
-    param_desc.description = "Exposure mode";
-    param_desc.integer_range[0].from_value = 0;
-    param_desc.integer_range[0].to_value = 3;
-    exposure_time_mode_ = this->declare_parameter("exposure_time_mode", 0, param_desc);
-
-    param_desc.description = "Exposure time";
-    param_desc.integer_range[0].from_value = 1;
-    param_desc.integer_range[0].to_value = 10000;
-    exposure_time_ = this->declare_parameter("exposure_time", 50, param_desc);
-
-    param_desc.description = "Brightness";
-    param_desc.integer_range[0].from_value = -64;
-    param_desc.integer_range[0].to_value = 64;
-    brightness_ = this->declare_parameter("brightness", 60, param_desc);
-
-    param_desc.description = "Contrast";
-    param_desc.integer_range[0].from_value = 0;
-    param_desc.integer_range[0].to_value = 100;
-    contrast_ = this->declare_parameter("contrast", 50, param_desc);
-
-    param_desc.description = "Saturation";
-    param_desc.integer_range[0].from_value = 0;
-    param_desc.integer_range[0].to_value = 100;
-    saturation_ = this->declare_parameter("saturation", 60, param_desc);
-  }
-
-  rcl_interfaces::msg::SetParametersResult parametersCallback(
-    const std::vector<rclcpp::Parameter> & parameters)
-  {
-    rcl_interfaces::msg::SetParametersResult result;
-    result.successful = true;
-
-    std::lock_guard<std::mutex> lock(mutex_);
-    bool camera_opened = (v4l2_fd_ >= 0);
-
-    for (const auto & param : parameters) {
-      const auto & name = param.get_name();
-
-      if (name == "exposure_time_mode") {
-        exposure_time_mode_ = param.as_int();
-        if (camera_opened) {
-          if (exposure_time_mode_ == 0) {
-            setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 1);
-            setV4L2Control(V4L2_CID_EXPOSURE_ABSOLUTE, exposure_time_.load());
-          } else {
-            setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 3);
-          }
-        }
-        RCLCPP_INFO(this->get_logger(), "Exposure mode: %d", exposure_time_mode_.load());
-
-      } else if (name == "exposure_time") {
-        exposure_time_ = param.as_int();
-        if (camera_opened && exposure_time_mode_ == 0) {
-          setV4L2Control(V4L2_CID_EXPOSURE_ABSOLUTE, exposure_time_.load());
-        }
-        RCLCPP_INFO(this->get_logger(), "Exposure time: %d", exposure_time_.load());
-
-      } else if (name == "brightness") {
-        brightness_ = param.as_int();
-        if (camera_opened) {
-          setV4L2Control(V4L2_CID_BRIGHTNESS, brightness_.load());
-        }
-        RCLCPP_INFO(this->get_logger(), "Brightness: %d", brightness_.load());
-
-      } else if (name == "contrast") {
-        contrast_ = param.as_int();
-        if (camera_opened) {
-          setV4L2Control(V4L2_CID_CONTRAST, contrast_.load());
-        }
-        RCLCPP_INFO(this->get_logger(), "Contrast: %d", contrast_.load());
-
-      } else if (name == "saturation") {
-        saturation_ = param.as_int();
-        if (camera_opened) {
-          setV4L2Control(V4L2_CID_SATURATION, saturation_.load());
-        }
-        RCLCPP_INFO(this->get_logger(), "Saturation: %d", saturation_.load());
-      }
-    }
-
-    return result;
-  }
-
-  void captureLoop()
-  {
-    int fail_count = 0;
-    constexpr int MAX_FAIL_COUNT = 5;
-
-    while (running_ && rclcpp::ok()) {
-      if (!camera_connected_) {
-        if (openCameraV4L2()) {
-          camera_connected_ = true;
-        } else {
-          std::this_thread::sleep_for(std::chrono::milliseconds(500));
-          continue;
-        }
-      }
-
-      fd_set fds;
-      FD_ZERO(&fds);
-      FD_SET(v4l2_fd_, &fds);
-
-      struct timeval tv = {};
-      tv.tv_sec = 1;
-      tv.tv_usec = 0;
-
-      int r = select(v4l2_fd_ + 1, &fds, nullptr, nullptr, &tv);
-
-      if (r == 0) {
-        fail_count++;
-        if (fail_count >= MAX_FAIL_COUNT) {
-          RCLCPP_ERROR(this->get_logger(), "Camera timeout, reconnecting...");
-          closeCameraV4L2();
-          camera_connected_ = false;
-          fail_count = 0;
-        }
-        continue;
-      }
-
-      struct v4l2_buffer buf = {};
-      buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-      buf.memory = V4L2_MEMORY_MMAP;
-
-      if (ioctl(v4l2_fd_, VIDIOC_DQBUF, &buf) < 0) {
-        if (errno == EAGAIN) continue;
-        RCLCPP_WARN(this->get_logger(), "Failed to dequeue buffer");
-        fail_count++;
-        if (fail_count >= MAX_FAIL_COUNT) {
-          closeCameraV4L2();
-          camera_connected_ = false;
-          fail_count = 0;
-        }
-        continue;
-      }
-
-      fail_count = 0;
-
-      sensor_msgs::msg::CompressedImage image_msg;
-      image_msg.header.stamp = this->now();
-      image_msg.header.frame_id = "camera_optical_frame";
-      image_msg.format = "jpeg";
-
-      const uint8_t * jpeg_data = static_cast<const uint8_t *>(v4l2_buffers_[buf.index].start);
-      image_msg.data.assign(jpeg_data, jpeg_data + buf.bytesused);
-
-      image_pub_->publish(image_msg);
-
-      camera_info_msg_.header = image_msg.header;
-      camera_info_pub_->publish(camera_info_msg_);
-
-      if (ioctl(v4l2_fd_, VIDIOC_QBUF, &buf) < 0) {
-        RCLCPP_WARN(this->get_logger(), "Failed to requeue buffer");
-      }
-    }
-
+  enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  if (ioctl(v4l2_fd_, VIDIOC_STREAMON, &type) < 0) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to start stream");
     closeCameraV4L2();
+    return false;
   }
 
-  // V4L2 相机资源
-  std::mutex mutex_;
-  int v4l2_fd_{-1};
-  std::vector<V4L2Buffer> v4l2_buffers_;
+  return true;
+}
 
-  // 参数
-  std::string camera_name_;
-  std::string camera_device_url_;
-  OnSetParametersCallbackHandle::SharedPtr params_callback_handle_;
-  int img_width_;
-  int img_height_;
-  std::atomic<int> frame_rate_;
-  std::atomic<int> exposure_time_;
-  std::atomic<int> exposure_time_mode_;
-  std::atomic<int> brightness_;
-  std::atomic<int> contrast_;
-  std::atomic<int> saturation_;
+void CameraCaptureNode::closeCameraV4L2()
+{
+  if (v4l2_fd_ >= 0) {
+    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    ioctl(v4l2_fd_, VIDIOC_STREAMOFF, &type);
 
-  // 状态类
-  std::atomic<bool> running_{false};
-  std::atomic<bool> camera_connected_{false};
+    for (auto & buf : v4l2_buffers_) {
+      if (buf.start != MAP_FAILED && buf.start != nullptr) {
+        munmap(buf.start, buf.length);
+      }
+    }
+    v4l2_buffers_.clear();
 
-  // 线程
-  std::thread capture_thread_;
+    close(v4l2_fd_);
+    v4l2_fd_ = -1;
+  }
+}
 
-  // 发布
-  sensor_msgs::msg::CameraInfo camera_info_msg_;
-  std::unique_ptr<camera_info_manager::CameraInfoManager> camera_info_manager_;
-  rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr image_pub_;
-  rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub_;
-};
+bool CameraCaptureNode::setV4L2Control(int id, int value)
+{
+  struct v4l2_control ctrl = {};
+  ctrl.id = id;
+  ctrl.value = value;
+  return ioctl(v4l2_fd_, VIDIOC_S_CTRL, &ctrl) >= 0;
+}
+
+void CameraCaptureNode::applyV4L2Controls()
+{
+  if (exposure_time_mode_.load() == 0) {
+    setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 1);
+    setV4L2Control(V4L2_CID_EXPOSURE_ABSOLUTE, exposure_time_.load());
+  } else {
+    setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 3);
+  }
+
+  setV4L2Control(V4L2_CID_BRIGHTNESS, brightness_.load());
+  setV4L2Control(V4L2_CID_CONTRAST, contrast_.load());
+  setV4L2Control(V4L2_CID_SATURATION, saturation_.load());
+}
+
+void CameraCaptureNode::declareParameters()
+{
+  rcl_interfaces::msg::ParameterDescriptor param_desc;
+  param_desc.integer_range.resize(1);
+  param_desc.integer_range[0].step = 1;
+
+  param_desc.description = "Frame rate (FPS)";
+  param_desc.integer_range[0].from_value = 1;
+  param_desc.integer_range[0].to_value = 60;
+  frame_rate_ = this->declare_parameter("frame_rate", 60, param_desc);
+
+  param_desc.description = "Exposure mode";
+  param_desc.integer_range[0].from_value = 0;
+  param_desc.integer_range[0].to_value = 3;
+  exposure_time_mode_ = this->declare_parameter("exposure_time_mode", 0, param_desc);
+
+  param_desc.description = "Exposure time";
+  param_desc.integer_range[0].from_value = 1;
+  param_desc.integer_range[0].to_value = 10000;
+  exposure_time_ = this->declare_parameter("exposure_time", 50, param_desc);
+
+  param_desc.description = "Brightness";
+  param_desc.integer_range[0].from_value = -64;
+  param_desc.integer_range[0].to_value = 64;
+  brightness_ = this->declare_parameter("brightness", 60, param_desc);
+
+  param_desc.description = "Contrast";
+  param_desc.integer_range[0].from_value = 0;
+  param_desc.integer_range[0].to_value = 100;
+  contrast_ = this->declare_parameter("contrast", 50, param_desc);
+
+  param_desc.description = "Saturation";
+  param_desc.integer_range[0].from_value = 0;
+  param_desc.integer_range[0].to_value = 100;
+  saturation_ = this->declare_parameter("saturation", 60, param_desc);
+}
+
+rcl_interfaces::msg::SetParametersResult CameraCaptureNode::parametersCallback(
+  const std::vector<rclcpp::Parameter> & parameters)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  bool camera_opened = (v4l2_fd_ >= 0);
+
+  for (const auto & param : parameters) {
+    const auto & name = param.get_name();
+
+    if (name == "exposure_time_mode") {
+      exposure_time_mode_ = param.as_int();
+      if (camera_opened) {
+        if (exposure_time_mode_ == 0) {
+          setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 1);
+          setV4L2Control(V4L2_CID_EXPOSURE_ABSOLUTE, exposure_time_.load());
+        } else {
+          setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 3);
+        }
+      }
+      RCLCPP_INFO(this->get_logger(), "Exposure mode: %d", exposure_time_mode_.load());
+
+    } else if (name == "exposure_time") {
+      exposure_time_ = param.as_int();
+      if (camera_opened && exposure_time_mode_ == 0) {
+        setV4L2Control(V4L2_CID_EXPOSURE_ABSOLUTE, exposure_time_.load());
+      }
+      RCLCPP_INFO(this->get_logger(), "Exposure time: %d", exposure_time_.load());
+
+    } else if (name == "brightness") {
+      brightness_ = param.as_int();
+      if (camera_opened) {
+        setV4L2Control(V4L2_CID_BRIGHTNESS, brightness_.load());
+      }
+      RCLCPP_INFO(this->get_logger(), "Brightness: %d", brightness_.load());
+
+    } else if (name == "contrast") {
+      contrast_ = param.as_int();
+      if (camera_opened) {
+        setV4L2Control(V4L2_CID_CONTRAST, contrast_.load());
+      }
+      RCLCPP_INFO(this->get_logger(), "Contrast: %d", contrast_.load());
+
+    } else if (name == "saturation") {
+      saturation_ = param.as_int();
+      if (camera_opened) {
+        setV4L2Control(V4L2_CID_SATURATION, saturation_.load());
+      }
+      RCLCPP_INFO(this->get_logger(), "Saturation: %d", saturation_.load());
+    }
+  }
+
+  return result;
+}
+
+void CameraCaptureNode::captureLoop()
+{
+  int fail_count = 0;
+  constexpr int MAX_FAIL_COUNT = 5;
+
+  while (running_ && rclcpp::ok()) {
+    if (!camera_connected_) {
+      if (openCameraV4L2()) {
+        camera_connected_ = true;
+      } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        continue;
+      }
+    }
+
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(v4l2_fd_, &fds);
+
+    struct timeval tv = {};
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+
+    int r = select(v4l2_fd_ + 1, &fds, nullptr, nullptr, &tv);
+    if (r == 0) {
+      fail_count++;
+      if (fail_count >= MAX_FAIL_COUNT) {
+        RCLCPP_ERROR(this->get_logger(), "Camera timeout, reconnecting...");
+        closeCameraV4L2();
+        camera_connected_ = false;
+        fail_count = 0;
+      }
+      continue;
+    }
+
+    struct v4l2_buffer buf = {};
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+
+    if (ioctl(v4l2_fd_, VIDIOC_DQBUF, &buf) < 0) {
+      if (errno == EAGAIN) continue;
+      RCLCPP_WARN(this->get_logger(), "Failed to dequeue buffer");
+      fail_count++;
+      if (fail_count >= MAX_FAIL_COUNT) {
+        closeCameraV4L2();
+        camera_connected_ = false;
+        fail_count = 0;
+      }
+      continue;
+    }
+
+    fail_count = 0;
+
+    sensor_msgs::msg::CompressedImage image_msg;
+    image_msg.header.stamp = this->now();
+    image_msg.header.frame_id = "camera_optical_frame";
+    image_msg.format = "jpeg";
+
+    const uint8_t * jpeg_data = static_cast<const uint8_t *>(v4l2_buffers_[buf.index].start);
+    image_msg.data.assign(jpeg_data, jpeg_data + buf.bytesused);
+    camera_info_msg_.header = image_msg.header;
+
+    image_pub_->publish(image_msg);
+    camera_info_pub_->publish(camera_info_msg_);
+
+    if (ioctl(v4l2_fd_, VIDIOC_QBUF, &buf) < 0) {
+      RCLCPP_WARN(this->get_logger(), "Failed to requeue buffer");
+    }
+  }
+
+  closeCameraV4L2();
+}
 }  // namespace usb_camera_driver
 
 #include "rclcpp_components/register_node_macro.hpp"

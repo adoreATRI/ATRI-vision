@@ -40,6 +40,12 @@ class BuffSimulator:
 
         self.img_w = 1280
         self.img_h = 720
+        
+        
+        self.block_side = 102.4
+        self.block_distance = 204.8
+        self.center_outer_radius = 51
+        self.center_inner_radius = 16
 
     # 运行
     def run(self):
@@ -125,10 +131,10 @@ class BuffSimulator:
 
         cx = self.img_w // 2
         cy = self.img_h // 2
-        center_x = cx + 204.8 * math.cos(block_angle)
-        center_y = cy + 204.8 * math.sin(block_angle)
+        center_x = cx + self.block_distance * math.cos(block_angle)
+        center_y = cy + self.block_distance * math.sin(block_angle)
 
-        corners = self.get_block_corners(center_x, center_y, block_angle, 102.4)
+        corners = self.get_block_corners(center_x, center_y, block_angle, self.block_side)
 
         color = COLOR_BGR[block_color_id]
         cv2.fillPoly(img, [corners], color)
@@ -137,9 +143,9 @@ class BuffSimulator:
         center = (self.img_w // 2, self.img_h // 2)
 
         target_color = COLOR_BGR[self.target_color_id]
-        cv2.circle(img, center, 51, target_color, -1)
+        cv2.circle(img, center, int(self.center_outer_radius), target_color, -1)
 
-        cv2.circle(img, center, 16, (255, 255, 255), -1)
+        cv2.circle(img, center, int(self.center_inner_radius), (255, 255, 255), -1)
 
 
     def get_block_corners(self, center_x, center_y, block_angle, side) -> np.ndarray:

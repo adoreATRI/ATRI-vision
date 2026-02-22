@@ -11,6 +11,7 @@
 #include <tf2_ros/message_filter.h>
 #include <tf2_ros/transform_listener.h>
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -34,6 +35,9 @@
 
 // Eigen
 #include <Eigen/Dense>
+
+// YAML
+#include <yaml-cpp/yaml.h>
 
 namespace atri_tracker
 {
@@ -97,19 +101,16 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr block_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr center_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr measure_marker_pub_;
-  rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr measure_circle_marker_pub_;
+
   visualization_msgs::msg::Marker block_marker_;
   visualization_msgs::msg::Marker center_marker_;
   visualization_msgs::msg::Marker measure_marker_;
-  visualization_msgs::msg::Marker measure_circle_marker_;
 
   // EKF
   void initEKF();
 
   // GNS
   void initGNS();
-
-  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pnp_result_pub_;
 };
 
 }  // namespace atri_tracker

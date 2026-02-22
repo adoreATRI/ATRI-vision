@@ -10,7 +10,7 @@ struct ColorBlock
 {
   ColorBlock() = default;
   std::vector<cv::Point2f> kpt;
-  float diff;
+  float diff = FLT_MAX;
 };
 
 }  // namespace atri_detector
