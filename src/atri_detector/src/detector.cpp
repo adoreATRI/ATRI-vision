@@ -1,14 +1,35 @@
 #include "atri_detector/detector.hpp"
 
+// C++
+#include <float.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+
+// ROS2
+#include <ament_index_cpp/get_package_share_directory.hpp>
+
 namespace atri_detector
 {
-Detector::Detector(const YAML::Node & cfg)
+Detector::Detector()
 {
-  input_size = cfg["detector"]["YOLO"]["input_size"].as<int>();
-  confidence_threshold = cfg["detector"]["YOLO"]["confidence_threshold"].as<float>();
-  iou_thresh = cfg["detector"]["YOLO"]["iou_thresh"].as<float>();
+  cfg_ = YAML::LoadFile(
+    ament_index_cpp::get_package_share_directory("atri_detector") + "/config/config.yaml");
+  const std::string onnxpath =
+    ament_index_cpp::get_package_share_directory("atri_detector") + "/model/block_detector.onnx";
+  onnx_ = std::make_unique<OnnxInference>();
 
-  lock_votes_threshold_ = cfg["detector"]["ColorFeature"]["lock_votes_threshold"].as<int>();
+  // Load parameters
+  input_size_ = cfg_["YOLO"]["input_size"].as<int>();
+  confidence_threshold_ = cfg_["YOLO"]["confidence_threshold"].as<float>();
+  iou_thresh_ = cfg_["YOLO"]["iou_thresh"].as<float>();
+  lock_votes_threshold_ = cfg_["ColorFeature"]["lock_votes_threshold"].as<int>();
+
+  // Load ONNX model
+  if (!onnx_->loadOnnx(onnxpath)) {
+    throw std::runtime_error("ONNX model load failed");
+  }
 }
 
 std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
@@ -35,11 +56,14 @@ std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
       if (blocks[rect_count].kpt.size() == 5) {
         rect_count++;
       }
+      if (rect_count >= 5) {
+        break;
+      }
     }
   }
 
   // Find circle colorblock in the study period to lock the target block hist
-  if (!locked_) {
+  if (!locked) {
     ColorBlock circle_block;
     for (const auto & det : yolo_result) {
       if (det.class_id == 0) {
@@ -64,8 +88,8 @@ std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
   }
 
   // Get target block
-  if ((blocks[5].kpt.size() == 5 || locked_) && blocks[0].kpt.size() == 5) {
-    getColorFeatures(image, blocks);
+  if ((blocks[5].kpt.size() == 5 || locked) && blocks[0].kpt.size() == 5) {
+    findTargetBlock(image, blocks);
 
     // Igonore unavailable blocks and circle block
     blocks.resize(rect_count);
@@ -233,10 +257,10 @@ void Detector::optimizeDetection(cv::Mat & image, std::vector<ColorBlock> & bloc
   }
 }
 
-void Detector::getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> & blocks)
+void Detector::findTargetBlock(const cv::Mat & image, std::vector<ColorBlock> & blocks)
 {
   // Study period
-  if (!locked_) {
+  if (!locked) {
     // Initialize votes
     if (!is_vote_started_) {
       for (int i = 0; i < rect_count; ++i) {
@@ -246,16 +270,14 @@ void Detector::getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> &
       }
       is_vote_started_ = true;
     } else {
-      // Find the block with minimum diff to the circle block
-      computeDiff(image, blocks);
-      std::sort(
-        blocks.begin(), blocks.begin() + rect_count,
-        [](const ColorBlock & a, const ColorBlock & b) { return a.diff < b.diff; });
-      cv::Mat best_hist = computeHSHistogram(image, blocks[0]);
+      // Find the best block
+      cv::Mat best_block_hist;
+      findBestBlock(image, blocks, best_block_hist);
 
       // Find the valent vote according to the best block
       for (size_t i = 0; i < votes_.size(); ++i) {
-        votes_[i].distance = cv::compareHist(votes_[i].hist, best_hist, cv::HISTCMP_BHATTACHARYYA);
+        votes_[i].distance =
+          cv::compareHist(votes_[i].hist, best_block_hist, cv::HISTCMP_BHATTACHARYYA);
       }
       std::sort(votes_.begin(), votes_.end(), [](const Vote & a, const Vote & b) {
         return a.distance < b.distance;
@@ -264,17 +286,16 @@ void Detector::getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> &
 
       // EMA update histogram
       float alpha = 0.9f;
-      votes_[0].hist = alpha * votes_[0].hist + (1 - alpha) * best_hist;
+      votes_[0].hist = alpha * votes_[0].hist + (1 - alpha) * best_block_hist;
       if (votes_[0].vote_count >= lock_votes_threshold_) {
-        locked_ = true;
+        locked = true;
         locked_hist_ = votes_[0].hist.clone();
       }
     }
   } else {  // Locked period
     for (int i = 0; i < rect_count; ++i) {
       cv::Mat hist = computeHSHistogram(image, blocks[i]);
-      double distance = cv::compareHist(hist, locked_hist_, cv::HISTCMP_BHATTACHARYYA);
-      blocks[i].diff = static_cast<float>(distance);
+      blocks[i].diff = cv::compareHist(hist, locked_hist_, cv::HISTCMP_BHATTACHARYYA);
     }
 
     std::sort(
@@ -290,18 +311,19 @@ void Detector::getColorFeatures(const cv::Mat & image, std::vector<ColorBlock> &
   }
 }
 
-void Detector::computeDiff(const cv::Mat & image, std::vector<ColorBlock> & blocks)
+void Detector::findBestBlock(
+  const cv::Mat & image, std::vector<ColorBlock> & blocks, cv::Mat & best_block_hist)
 {
-  std::vector<int> ab_channels_circle;
-  getCircleColorFeatures(image, blocks[5], ab_channels_circle);
+  cv::Mat circle_hist = computeCircleHistogram(image, blocks[5]);
 
+  float min_distance = FLT_MAX;
   for (int i = 0; i < rect_count; ++i) {
-    std::vector<int> ab_channels;
-    getRectColorFeatures(image, blocks[i], ab_channels);
-
-    float ab_distance = 0.0f;
-    abDistance(ab_channels_circle, ab_channels, ab_distance);
-    blocks[i].diff = ab_distance;
+    cv::Mat hist = computeHSHistogram(image, blocks[i]);
+    float distance = cv::compareHist(circle_hist, hist, cv::HISTCMP_BHATTACHARYYA);
+    if (distance < min_distance) {
+      min_distance = distance;
+      best_block_hist = hist.clone();
+    }
   }
 }
 
@@ -406,49 +428,29 @@ void Detector::sortCorners(const cv::Point2f & yolo_kpt, std::vector<cv::Point2f
   kpts = sorted;
 };
 
-void Detector::getCircleColorFeatures(
-  const cv::Mat & image, const ColorBlock & circle_block, std::vector<int> & ab_channels_circle)
+cv::Mat Detector::computeCircleHistogram(const cv::Mat & image, const ColorBlock & circle_block)
 {
-  cv::Mat image_lab;
-  cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
+  cv::Mat image_hsv;
+  cv::cvtColor(image, image_hsv, cv::COLOR_BGR2HSV);
 
   cv::Mat mask = cv::Mat::zeros(image.size(), CV_8UC1);
   float radius = cv::norm(circle_block.kpt[4] - circle_block.kpt[1]);
   cv::circle(mask, circle_block.kpt[4], static_cast<int>(0.8 * radius), cv::Scalar(255), -1);
   cv::circle(mask, circle_block.kpt[4], static_cast<int>(0.5 * radius), cv::Scalar(0), -1);
 
-  cv::Scalar mean_lab = cv::mean(image_lab, mask);
+  int channels[] = {0, 1};
+  int histSize[] = {32, 32};
 
-  ab_channels_circle.resize(2);
-  ab_channels_circle[0] = static_cast<int>(mean_lab[1]);
-  ab_channels_circle[1] = static_cast<int>(mean_lab[2]);
-}
+  float h_range[] = {0, 180};
+  float s_range[] = {0, 256};
+  const float * ranges[] = {h_range, s_range};
 
-void Detector::getRectColorFeatures(
-  const cv::Mat & image, ColorBlock & block, std::vector<int> & ab_channels)
-{
-  cv::Mat image_lab;
-  cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
+  cv::Mat hist;
+  cv::calcHist(&image_hsv, 1, channels, mask, hist, 2, histSize, ranges);
 
-  cv::Mat mask = cv::Mat::zeros(image.size(), CV_8UC1);
-  std::vector<cv::Point> poly = {
-    cv::Point(block.kpt[0]), cv::Point(block.kpt[1]), cv::Point(block.kpt[2]),
-    cv::Point(block.kpt[3])};
-  cv::fillConvexPoly(mask, poly, cv::Scalar(255));
-  cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-  cv::erode(mask, mask, kernel, cv::Point(-1, -1), 2);
+  cv::normalize(hist, hist, 1.0, 0.0, cv::NORM_L1);
 
-  cv::Scalar mean_lab = cv::mean(image_lab, mask);
-
-  ab_channels.resize(2);
-  ab_channels[0] = static_cast<int>(mean_lab[1]);
-  ab_channels[1] = static_cast<int>(mean_lab[2]);
-}
-
-void Detector::abDistance(
-  const std::vector<int> & ab1, const std::vector<int> & ab2, float & distance)
-{
-  distance = std::sqrt(std::pow(ab1[0] - ab2[0], 2) + std::pow(ab1[1] - ab2[1], 2));
+  return hist;
 }
 
 std::vector<YoloDetection> Detector::getYoloResult(const cv::Mat & image)
@@ -467,11 +469,11 @@ std::vector<YoloDetection> Detector::getYoloResult(const cv::Mat & image)
   std::memcpy(input_data.data(), blob.ptr<float>(), blob_total * sizeof(float));
 
   std::vector<float> output_data;
-  if (!onnx->infer(input_data, output_data)) {
+  if (!onnx_->infer(input_data, output_data)) {
     return results;
   }
 
-  auto output_dims = onnx->getOutputDims();
+  auto output_dims = onnx_->getOutputDims();
 
   int num_anchors = output_dims[2];
   int num_classes = 2;
@@ -495,7 +497,7 @@ std::vector<YoloDetection> Detector::getYoloResult(const cv::Mat & image)
       }
     }
 
-    if (max_score < confidence_threshold) {
+    if (max_score < confidence_threshold_) {
       continue;
     }
 
@@ -526,17 +528,17 @@ cv::Mat Detector::yoloPreprocess(const cv::Mat & image, float & scale, int & pad
   int orig_w = image.cols;
   int orig_h = image.rows;
   scale =
-    std::min(static_cast<float>(input_size) / orig_w, static_cast<float>(input_size) / orig_h);
+    std::min(static_cast<float>(input_size_) / orig_w, static_cast<float>(input_size_) / orig_h);
 
   int new_w = static_cast<int>(orig_w * scale);
   int new_h = static_cast<int>(orig_h * scale);
-  pad_x = (input_size - new_w) / 2;
-  pad_y = (input_size - new_h) / 2;
+  pad_x = (input_size_ - new_w) / 2;
+  pad_y = (input_size_ - new_h) / 2;
 
   cv::Mat resized;
   cv::resize(image, resized, cv::Size(new_w, new_h));
 
-  cv::Mat padded(input_size, input_size, CV_8UC3, cv::Scalar(114, 114, 114));
+  cv::Mat padded(input_size_, input_size_, CV_8UC3, cv::Scalar(114, 114, 114));
   resized.copyTo(padded(cv::Rect(pad_x, pad_y, new_w, new_h)));
 
   cv::Mat blob = cv::dnn::blobFromImage(padded, 1.0 / 255.0, cv::Size(), cv::Scalar(), true);
@@ -566,7 +568,7 @@ void Detector::nms(std::vector<YoloDetection> & result)
       float inter_area = std::max(0.0f, inter_x2 - inter_x1) * std::max(0.0f, inter_y2 - inter_y1);
       float union_area = result[i].bbox.area() + result[j].bbox.area() - inter_area;
 
-      if (inter_area / union_area > iou_thresh) {
+      if (inter_area / union_area > iou_thresh_) {
         suppressed[j] = true;
       }
     }
@@ -577,36 +579,6 @@ void Detector::nms(std::vector<YoloDetection> & result)
     if (!suppressed[i]) result_filtered.push_back(result[i]);
   }
   result = result_filtered;
-}
-
-cv::Mat Detector::computeABHistogram(const cv::Mat & image, const ColorBlock & block)
-{
-  cv::Mat image_lab;
-  cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
-
-  cv::Mat mask = cv::Mat::zeros(image.size(), CV_8UC1);
-  std::vector<cv::Point> poly = {
-    cv::Point(block.kpt[0]), cv::Point(block.kpt[1]), cv::Point(block.kpt[2]),
-    cv::Point(block.kpt[3])};
-  cv::fillConvexPoly(mask, poly, cv::Scalar(255));
-  cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-  cv::erode(mask, mask, kernel, cv::Point(-1, -1), 2);
-
-  std::vector<cv::Mat> lab_channels;
-  cv::split(image_lab, lab_channels);
-  cv::Mat ab_image;
-  cv::merge(std::vector<cv::Mat>{lab_channels[1], lab_channels[2]}, ab_image);
-
-  int histSize[] = {32, 32};
-  float range[] = {0, 256};
-  const float * ranges[] = {range, range};
-  int channels[] = {0, 1};
-
-  cv::Mat hist;
-  cv::calcHist(&ab_image, 1, channels, mask, hist, 2, histSize, ranges);
-  cv::normalize(hist, hist, 0, 1, cv::NORM_MINMAX);
-
-  return hist;
 }
 
 cv::Mat Detector::computeHSHistogram(const cv::Mat & image, const ColorBlock & block)
@@ -635,6 +607,14 @@ cv::Mat Detector::computeHSHistogram(const cv::Mat & image, const ColorBlock & b
   cv::normalize(hist, hist, 1.0, 0.0, cv::NORM_L1);
 
   return hist;
+}
+
+void Detector::resetDetector()
+{
+  locked = false;
+  is_vote_started_ = false;
+  votes_.clear();
+  locked_hist_ = cv::Mat();
 }
 
 }  // namespace atri_detector

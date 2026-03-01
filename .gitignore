@@ -2,9 +2,4 @@ build
 install
 log
 yolo8
-yolo8n-pose.pt
 
-runs/pose/block_detector/*
-!runs/pose/block_detector/weights/
-runs/pose/block_detector/weights/*
-!runs/pose/block_detector/weights/best.*

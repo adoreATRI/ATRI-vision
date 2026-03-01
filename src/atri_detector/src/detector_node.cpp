@@ -1,53 +1,54 @@
 #include "atri_detector/detector_node.hpp"
 
+// C++
+#include <chrono>
+
+// TF2
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
+
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
 namespace atri_detector
 {
 DetectorNode::DetectorNode(const rclcpp::NodeOptions & options) : Node("detector_node", options)
 {
-  const std::string onnxpath = ament_index_cpp::get_package_share_directory("atri_detector") +
-                               "/../../../../runs/pose/block_detector/weights/best.onnx";
-  const std::string config_path = ament_index_cpp::get_package_share_directory("atri_tracker") +
-                                  "/../../../../src/bringup/config/config.yaml";
-
-  detector_ = std::make_unique<Detector>(YAML::LoadFile(config_path));
-  detector_->onnx = std::make_unique<OnnxInference>();
-
-  // Load ONNX model
-  if (!detector_->onnx->loadEngine(onnxpath)) {
-    RCLCPP_FATAL(this->get_logger(), "Failed to load ONNX model!");
-    throw std::runtime_error("ONNX model load failed");
-  }
+  detector_ = std::make_unique<Detector>();
 
   // Create Publishers
   color_blocks_pub_ =
     this->create_publisher<atri_interfaces::msg::ColorBlockArray>("detector/color_blocks", 10);
-  latency_pub_ = this->create_publisher<std_msgs::msg::String>("inference/latency", 10);
 
   // Create Subscribers
+  keyboard_control_sub_ = this->create_subscription<std_msgs::msg::String>(
+    "keyboard_node/key", 10, [this](std_msgs::msg::String::ConstSharedPtr msg) {
+      if (msg->data == "r") {
+        RCLCPP_INFO(this->get_logger(), "Reset detector");
+        detector_->resetDetector();
+      }
+    });
   camera_info_sub_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
-    "camera_info", rclcpp::SensorDataQoS(),
+    "usb_camera/camera_info", rclcpp::SensorDataQoS(),
     [this](sensor_msgs::msg::CameraInfo::ConstSharedPtr camera_info) {
-      camera_info_ = std::make_shared<sensor_msgs::msg::CameraInfo>(*camera_info);
       pnp_solver_ = std::make_unique<PnPSolver>(camera_info->k, camera_info->d);
       camera_info_sub_.reset();
     });
   image_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
-    "image_compressed", rclcpp::SensorDataQoS(),
+    "usb_camera/image_compressed", rclcpp::SensorDataQoS(),
     std::bind(&DetectorNode::imageCallback, this, std::placeholders::_1));
 }
 
 void DetectorNode::imageCallback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr & msg)
 {
   // Detect ColorBlocks
-  std::vector<ColorBlock> color_blocks = DetectColorBlocks(msg);
-  if (color_blocks.size() < 1) {
-    return;
-  }
-
-  // Package ColorBlocks message
   atri_interfaces::msg::ColorBlockArray color_block_array;
   color_block_array.header = msg->header;
   color_block_array.header.frame_id = "camera_optical_frame";
+
+  std::vector<ColorBlock> color_blocks = DetectColorBlocks(msg);
+  if (color_blocks.size() < 1 || !detector_->locked) {
+    return;
+  }
 
   for (size_t i = 0; i < color_blocks.size(); ++i) {
     atri_interfaces::msg::ColorBlock color_block_msg;
@@ -94,10 +95,6 @@ std::vector<ColorBlock> DetectorNode::DetectColorBlocks(
 
   auto end_time = std::chrono::steady_clock::now();
   auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-  std_msgs::msg::String latency_msg;
-  latency_msg.data = std::to_string(time.count());
-  latency_pub_->publish(latency_msg);
-
   return result;
 }
 

@@ -1,9 +1,14 @@
 #include "atri_detector/onnx_inference.hpp"
 
+// C++
+#include <iostream>
+#include <memory>
+#include <string>
+
 namespace atri_detector
 {
 
-bool OnnxInference::loadEngine(const std::string & onnx_path)
+bool OnnxInference::loadOnnx(const std::string & onnx_path)
 {
   if (onnx_path.empty()) {
     std::cerr << "[OnnxInference] ONNX model path is empty!" << std::endl;

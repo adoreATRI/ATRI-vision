@@ -1,15 +1,28 @@
 from launch import LaunchDescription
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
+
 from ament_index_python.packages import get_package_share_directory
 import os
 
 def generate_launch_description():
 
-    config = os.path.join(
-      get_package_share_directory('bringup'),
+    camera_config = os.path.join(
+      get_package_share_directory('usb_camera'),
         'config',
-        'camera_params.yaml'    
+        'config.yaml'    
+    )
+
+    tracker_config = os.path.join(
+        get_package_share_directory('atri_tracker'),
+        'config',
+        'config.yaml'
+    )
+
+    serial_config = os.path.join(
+        get_package_share_directory('atri_serial_driver'),
+        'config',
+        'config.yaml'
     )
 
     container = ComposableNodeContainer(
@@ -20,10 +33,10 @@ def generate_launch_description():
         output='screen',
         composable_node_descriptions=[
             ComposableNode(
-                package='usb_camera_driver',
-                plugin='usb_camera_driver::CameraCaptureNode',
-                name='camera_capture_node',
-                parameters=[config]
+                package='usb_camera',
+                plugin='usb_camera::USBCameraNode',
+                name='usb_camera_node',
+                parameters=[camera_config]
             ),
 
             ComposableNode(
@@ -36,6 +49,14 @@ def generate_launch_description():
                 package='atri_tracker',
                 plugin='atri_tracker::TrackerNode',
                 name='tracker_node',
+                parameters=[tracker_config]
+            ),
+
+            ComposableNode(
+                package='atri_serial_driver',
+                plugin='atri_serial_driver::ATRISerialDriver',
+                name='atri_serial_driver',
+                parameters=[serial_config]
             ),
         ]
     )

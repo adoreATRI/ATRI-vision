@@ -1,20 +1,24 @@
-#include "usb_camera_driver/camera_capture_node.hpp"
+#include "usb_camera/usb_camera_node.hpp"
 
-namespace usb_camera_driver
+// V4L2
+#include <fcntl.h>
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+namespace usb_camera
 {
 
-CameraCaptureNode::CameraCaptureNode(const rclcpp::NodeOptions & options)
-: Node("camera_capture_node", options)
+USBCameraNode::USBCameraNode(const rclcpp::NodeOptions & options) : Node("usb_camera_node", options)
 {
-  RCLCPP_INFO(this->get_logger(), "CameraCaptureNode started.");
+  RCLCPP_INFO(this->get_logger(), "USBCameraNode started.");
 
-  camera_name_ = this->declare_parameter("camera_name", "usb_camera");
-  camera_device_url_ = this->declare_parameter(
-    "camera_device_v4l_url", "/dev/v4l/by-id/usb-RYS_USB_Camera_200901010001-video-index0");
-  auto camera_info_url =
-    this->declare_parameter("camera_info_url", "package://bringup/config/camera_params.yaml");
+  camera_device_url_ = this->declare_parameter("camera_device_v4l_url", "");
+  auto camera_info_url = this->declare_parameter("camera_info_url", "");
+
   camera_info_manager_ =
-    std::make_unique<camera_info_manager::CameraInfoManager>(this, camera_name_);
+    std::make_unique<camera_info_manager::CameraInfoManager>(this, "usb_camera");
 
   // Load camera info from URL
   if (camera_info_manager_->validateURL(camera_info_url)) {
@@ -27,28 +31,26 @@ CameraCaptureNode::CameraCaptureNode(const rclcpp::NodeOptions & options)
 
   // Create publishers
   image_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>(
-    "image_compressed", rclcpp::SensorDataQoS());
-  camera_info_pub_ =
-    this->create_publisher<sensor_msgs::msg::CameraInfo>("camera_info", rclcpp::SensorDataQoS());
+    "usb_camera/image_compressed", rclcpp::SensorDataQoS());
+  camera_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>(
+    "usb_camera/camera_info", rclcpp::SensorDataQoS());
 
-  img_width_ = this->declare_parameter("image_width", 1280);
-  img_height_ = this->declare_parameter("image_height", 720);
-
+  // Set camera parameters
   declareParameters();
 
   // Parameter callback
   params_callback_handle_ = this->add_on_set_parameters_callback(
-    std::bind(&CameraCaptureNode::parametersCallback, this, std::placeholders::_1));
+    std::bind(&USBCameraNode::parametersCallback, this, std::placeholders::_1));
 
   // Capture thread
   RCLCPP_INFO(this->get_logger(), "Starting capture thread...");
   running_ = true;
-  capture_thread_ = std::thread(&CameraCaptureNode::captureLoop, this);
+  capture_thread_ = std::thread(&USBCameraNode::captureLoop, this);
 }
 
-CameraCaptureNode::~CameraCaptureNode()
+USBCameraNode::~USBCameraNode()
 {
-  RCLCPP_INFO(this->get_logger(), "Shutting down CameraCaptureNode...");
+  RCLCPP_INFO(this->get_logger(), "Shutting down USBCameraNode...");
 
   running_ = false;
 
@@ -58,10 +60,10 @@ CameraCaptureNode::~CameraCaptureNode()
 
   closeCameraV4L2();
 
-  RCLCPP_INFO(this->get_logger(), "CameraCaptureNode shut down complete.");
+  RCLCPP_INFO(this->get_logger(), "USBCameraNode shut down complete.");
 }
 
-bool CameraCaptureNode::openCameraV4L2()
+bool USBCameraNode::openCameraV4L2()
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
@@ -156,8 +158,10 @@ bool CameraCaptureNode::openCameraV4L2()
   return true;
 }
 
-void CameraCaptureNode::closeCameraV4L2()
+void USBCameraNode::closeCameraV4L2()
 {
+  std::lock_guard<std::mutex> lock(mutex_);
+
   if (v4l2_fd_ >= 0) {
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     ioctl(v4l2_fd_, VIDIOC_STREAMOFF, &type);
@@ -174,7 +178,7 @@ void CameraCaptureNode::closeCameraV4L2()
   }
 }
 
-bool CameraCaptureNode::setV4L2Control(int id, int value)
+bool USBCameraNode::setV4L2Control(int id, int value)
 {
   struct v4l2_control ctrl = {};
   ctrl.id = id;
@@ -182,7 +186,7 @@ bool CameraCaptureNode::setV4L2Control(int id, int value)
   return ioctl(v4l2_fd_, VIDIOC_S_CTRL, &ctrl) >= 0;
 }
 
-void CameraCaptureNode::applyV4L2Controls()
+void USBCameraNode::applyV4L2Controls()
 {
   if (exposure_time_mode_.load() == 0) {
     setV4L2Control(V4L2_CID_EXPOSURE_AUTO, 1);
@@ -196,8 +200,11 @@ void CameraCaptureNode::applyV4L2Controls()
   setV4L2Control(V4L2_CID_SATURATION, saturation_.load());
 }
 
-void CameraCaptureNode::declareParameters()
+void USBCameraNode::declareParameters()
 {
+  img_width_ = this->declare_parameter("image_width", 1280);
+  img_height_ = this->declare_parameter("image_height", 720);
+
   rcl_interfaces::msg::ParameterDescriptor param_desc;
   param_desc.integer_range.resize(1);
   param_desc.integer_range[0].step = 1;
@@ -233,7 +240,7 @@ void CameraCaptureNode::declareParameters()
   saturation_ = this->declare_parameter("saturation", 60, param_desc);
 }
 
-rcl_interfaces::msg::SetParametersResult CameraCaptureNode::parametersCallback(
+rcl_interfaces::msg::SetParametersResult USBCameraNode::parametersCallback(
   const std::vector<rclcpp::Parameter> & parameters)
 {
   rcl_interfaces::msg::SetParametersResult result;
@@ -290,7 +297,7 @@ rcl_interfaces::msg::SetParametersResult CameraCaptureNode::parametersCallback(
   return result;
 }
 
-void CameraCaptureNode::captureLoop()
+void USBCameraNode::captureLoop()
 {
   int fail_count = 0;
   constexpr int MAX_FAIL_COUNT = 5;
@@ -314,7 +321,7 @@ void CameraCaptureNode::captureLoop()
     tv.tv_usec = 0;
 
     int r = select(v4l2_fd_ + 1, &fds, nullptr, nullptr, &tv);
-    if (r == 0) {
+    if (r <= 0) {
       fail_count++;
       if (fail_count >= MAX_FAIL_COUNT) {
         RCLCPP_ERROR(this->get_logger(), "Camera timeout, reconnecting...");
@@ -362,7 +369,7 @@ void CameraCaptureNode::captureLoop()
 
   closeCameraV4L2();
 }
-}  // namespace usb_camera_driver
+}  // namespace usb_camera
 
 #include "rclcpp_components/register_node_macro.hpp"
-RCLCPP_COMPONENTS_REGISTER_NODE(usb_camera_driver::CameraCaptureNode)
+RCLCPP_COMPONENTS_REGISTER_NODE(usb_camera::USBCameraNode)

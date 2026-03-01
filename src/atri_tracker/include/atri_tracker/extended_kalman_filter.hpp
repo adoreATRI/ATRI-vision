@@ -5,7 +5,6 @@
 #define ATRI_TRACKER__KALMAN_FILTER_HPP_
 
 #include <Eigen/Dense>
-#include <functional>
 
 namespace atri_tracker
 {

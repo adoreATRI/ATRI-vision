@@ -3,23 +3,27 @@
 
 #include "atri_tracker/tracker_node.hpp"
 
+// C++
+#include <memory>
+#include <string>
+
+// ROS2
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
+// Eigen
+#include <Eigen/Dense>
+
 namespace atri_tracker
 {
 
 TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_tracker", options)
 {
-  // Yaml
-  const std::string config_path = ament_index_cpp::get_package_share_directory("atri_tracker") +
-                                  "/../../../../src/bringup/config/config.yaml";
-  YAML::Node cfg = YAML::LoadFile(config_path);
-
   // Parameters
   target_frame_ = this->declare_parameter("target_frame", "odom");
-  double max_match_theta = this->declare_parameter("tracker.max_match_theta", 0.314);
-  double max_match_center_xoy = this->declare_parameter(
-    "tracker.max_match_center_xoy", cfg["tracker"]["max_match_center_xoy"].as<double>());
+  double max_match_theta = this->declare_parameter("tracker.max_match_theta", 1.5);
+  double max_match_center_xoy = this->declare_parameter("tracker.max_match_center_xoy", 0.628);
   lost_time_threshold_ = this->declare_parameter("tracker.lost_time_threshold", 0.5);
-
   tracker_ = std::make_unique<Tracker>(max_match_theta, max_match_center_xoy);
   tracker_->tracking_threshold = this->declare_parameter("tracker.tracking_threshold", 10);
 
@@ -34,8 +38,6 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
 
   // Create Publishers
   rune_publisher_ = this->create_publisher<atri_interfaces::msg::Rune>("tracker/rune", 10);
-  rune_info_publisher_ =
-    this->create_publisher<atri_interfaces::msg::RuneInfo>("tracker/rune_info", 10);
   block_marker_pub_ =
     this->create_publisher<visualization_msgs::msg::Marker>("tracker/block_marker", 10);
   center_marker_pub_ =
@@ -44,6 +46,18 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
     this->create_publisher<visualization_msgs::msg::Marker>("tracker/measure_marker", 10);
 
   // Subscriber with tf2 message_filter
+  keyboard_control_sub_ = this->create_subscription<std_msgs::msg::String>(
+    "keyboard_node/key", 10, [this](const std_msgs::msg::String::SharedPtr msg) {
+      if (msg->data == "r") {
+        task_mode_ = (task_mode_ == "small_buff") ? "large_buff" : "small_buff";
+        tracker_->tracker_state = Tracker::State::LOST;
+        RCLCPP_INFO(
+          rclcpp::get_logger("TrackerNode"), "Reset tracker, Task mode switched to: %s",
+          task_mode_.c_str());
+      }
+    });
+
+  // tf2_filter
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
     this->get_node_base_interface(), this->get_node_timers_interface());
@@ -66,20 +80,19 @@ void TrackerNode::colorBlockCallback(
   for (auto & color_block : color_block_msg->color_blocks) {
     geometry_msgs::msg::TransformStamped transform_stamped;
     try {
+      rclcpp::Time msg_time(color_block_msg->header.stamp, this->get_clock()->get_clock_type());
       transform_stamped = tf2_buffer_->lookupTransform(
-        target_frame_, color_block_msg->header.frame_id, color_block_msg->header.stamp,
+        target_frame_, color_block_msg->header.frame_id, msg_time,
         rclcpp::Duration::from_seconds(0.0));
     } catch (tf2::TransformException & ex) {
+      RCLCPP_WARN(this->get_logger(), "%s", ex.what());
       return;
     }
     tf2::doTransform(color_block.pose, color_block.pose, transform_stamped);
   }
 
   // Init message
-  rclcpp::Time time = color_block_msg->header.stamp;
-  atri_interfaces::msg::RuneInfo rune_info_msg;
-  rune_info_msg.header.stamp = time;
-  rune_info_msg.header.frame_id = target_frame_;
+  rclcpp::Time time(color_block_msg->header.stamp, this->get_clock()->get_clock_type());
   atri_interfaces::msg::Rune rune_msg;
   rune_msg.header.stamp = time;
   rune_msg.header.frame_id = target_frame_;
@@ -94,19 +107,14 @@ void TrackerNode::colorBlockCallback(
   if (tracker_->tracker_state == Tracker::State::LOST) {
     tracker_->init(color_block_msg);
     rune_msg.tracking = false;
+    last_time_ = rclcpp::Time(color_block_msg->header.stamp, this->get_clock()->get_clock_type());
   } else {
     dt_ = (time - last_time_).seconds();
     tracker_->lost_threshold = static_cast<int>(lost_time_threshold_ / dt_);
     tracker_->update(color_block_msg);
-    tracker_->solve(time);
-
-    // Publish rune
-    rune_info_msg.block.x = tracker_->block_tracked.block_position.x;
-    rune_info_msg.block.y = tracker_->block_tracked.block_position.y;
-    rune_info_msg.block.z = tracker_->block_tracked.block_position.z;
-    rune_info_msg.center.x = tracker_->block_tracked.center_position.x;
-    rune_info_msg.center.y = tracker_->block_tracked.center_position.y;
-    rune_info_msg.center.z = tracker_->block_tracked.center_position.z;
+    if (task_mode_ == "large_buff") {
+      tracker_->solve(time);
+    }
 
     if (tracker_->tracker_state == Tracker::State::DETECTING) {
       rune_msg.tracking = false;
@@ -124,32 +132,38 @@ void TrackerNode::colorBlockCallback(
       rune_msg.velocity.x = state(3);
       rune_msg.velocity.y = state(4);
       rune_msg.velocity.z = state(5);
+      // Update rotation basis
+      rune_msg.axis_u.x = tracker_->rotation_basis.u.x();
+      rune_msg.axis_u.y = tracker_->rotation_basis.u.y();
+      rune_msg.axis_u.z = tracker_->rotation_basis.u.z();
+      rune_msg.axis_v.x = tracker_->rotation_basis.v.x();
+      rune_msg.axis_v.y = tracker_->rotation_basis.v.y();
+      rune_msg.axis_v.z = tracker_->rotation_basis.v.z();
       rune_msg.r = state(6);
       rune_msg.theta = block_predict.theta;
-      rune_info_msg.speed = state(8);
       rune_msg.a = 0.0;
       rune_msg.w = 0.0;
       rune_msg.c = 0.0;
       rune_msg.b = state(8);
+
       auto now_sec = time.seconds();
       auto obs_time = tracker_->obs_start_time.seconds();
 
-      const auto & gns_state = tracker_->spd_state;
-      int sign = state(8) >= 0 ? 1 : -1;
-      if (tracker_->solver_status == Tracker::SolverStatus::VALID) {
-        rune_msg.a = gns_state(0) * sign;
-        rune_msg.w = gns_state(1);
-        rune_msg.c = gns_state(2);
-        rune_msg.b = (2.09 - gns_state(0)) * sign;
-        int T = 2 * PI / rune_msg.w * 1000;
-        rune_msg.t_offset = int((now_sec - obs_time + rune_msg.c / rune_msg.w) * 1000) % T;
+      if (task_mode_ == "large_buff") {
+        const auto & gns_state = tracker_->spd_state;
+        int sign = state(8) >= 0 ? 1 : -1;
+        if (tracker_->solver_status == Tracker::SolverStatus::VALID) {
+          rune_msg.a = gns_state(0) * sign;
+          rune_msg.w = gns_state(1);
+          rune_msg.c = gns_state(2);
+          rune_msg.b = (2.09 - gns_state(0)) * sign;
+          int T = 2 * M_PI / rune_msg.w * 1000;
+          rune_msg.t_offset = int((now_sec - obs_time + rune_msg.c / rune_msg.w) * 1000) % T;
 
-      } else {
-        rune_msg.tracking = tracker_->solver_status == Tracker::SolverStatus::INVALID;
+        } else {
+          rune_msg.tracking = tracker_->solver_status == Tracker::SolverStatus::VALID;
+        }
       }
-
-      rune_info_msg.predicted_speed =
-        rune_msg.a * sin(1.0 * rune_msg.t_offset / 1000.0 * rune_msg.w) + rune_msg.b;
 
       center_marker_.header.stamp = time;
       center_marker_.pose.position.x = block_predict.center_position.x;
@@ -162,11 +176,11 @@ void TrackerNode::colorBlockCallback(
       block_marker_.pose.position.y = block_predict.block_position.y;
       block_marker_.pose.position.z = block_predict.block_position.z;
       auto q = tf2::Quaternion();
-      q.setRPY(atan2(block_predict.center_position.y, block_predict.center_position.x), -PI / 2, 0);
+      q.setRPY(
+        atan2(block_predict.center_position.y, block_predict.center_position.x), -M_PI / 2, 0);
       block_marker_.pose.orientation = tf2::toMsg(q);
       block_marker_pub_->publish(block_marker_);
     }
-    rune_info_publisher_->publish(rune_info_msg);
   }
   last_time_ = time;
   rune_publisher_->publish(rune_msg);
@@ -277,9 +291,9 @@ void TrackerNode::initEKF()
   };
 
   // update_Q - process noise covariance matrix
-  s2qxyz_ = declare_parameter("ekf.sigma2_q_xyz", 1e-4);
+  s2qxyz_ = declare_parameter("ekf.sigma2_q_xyz", 5e-4);
   s2qtheta_ = declare_parameter("ekf.sigma2_q_theta", 1e-2);
-  s2qr_ = declare_parameter("ekf.sigma2_q_r", 80.0);
+  s2qr_ = declare_parameter("ekf.sigma2_q_r", 1e-6);
   auto u_q = [this]() {
     Eigen::MatrixXd q(9, 9);
     
@@ -306,10 +320,10 @@ void TrackerNode::initEKF()
     return q;
   };
   // update_R - measurement noise covariance matrix
-  r_block_ = declare_parameter("ekf.r_block", 1e-8);
-  r_center_ = declare_parameter("ekf.r_center", 1e-8);
-  r_block_min_ = declare_parameter("ekf.r_block_min", 1e-4);
-  r_center_min_ = declare_parameter("ekf.r_center_min", 1e-4);
+  r_block_ = declare_parameter("ekf.r_block", 5e-6);
+  r_center_ = declare_parameter("ekf.r_center", 5e-5);
+  r_block_min_ = declare_parameter("ekf.r_block_min", 1e-7);
+  r_center_min_ = declare_parameter("ekf.r_center_min", 1e-7);
   auto u_r = [this](const Eigen::VectorXd & z) {
     Eigen::DiagonalMatrix<double, 4> r;
     double xb = r_block_;
@@ -370,7 +384,7 @@ void TrackerNode::initGNS()
   tracker_->a_start = declare_parameter("gns.a_start", 0.9125);
   tracker_->w_start = declare_parameter("gns.w_start", 1.942);
   tracker_->c_start = declare_parameter("gns.c_start", 0.0);
-  tracker_->min_first_solve_time = declare_parameter("gns.min_first_solve_time", 2.0);
+  tracker_->min_first_solve_time = declare_parameter("gns.min_first_solve_time", 1.5);
 
   // GNS EKF
   // state: a, w, c

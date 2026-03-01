@@ -1,33 +1,25 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>atri_detector</name>
-  <version>1.1.0</version>
+  <name>atri_serial_driver</name>
+  <version>1.0.0</version>
   <description>
-    Detect the target block which is the same color as the circle block and publish its 3D position.
-    Use onnx load the yolo8 model and find the target block with OpenCV 
-    Subscribe the usb_camera/image_compressed jpeg image format topic and usb_camera/camera_info topic, and subscribe the keyboard_node/key topic to control the detector state
-    Publish the detector/color_blocks topic.
+    Serial driver and solve the angles to the target
+    Subscribe the moothed target position
+    Send the packet to the serial port
   </description>
   <maintainer email="makochishima043@gmail.com">adore</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
 
-  <depend>sensor_msgs</depend>
-  <depend>std_msgs</depend>
   <depend>atri_interfaces</depend>
   <depend>tf2_geometry_msgs</depend>
 
+  <depend>serial_driver</depend>
   <depend>tf2</depend>
-
-  <depend>ament_index_cpp</depend>
-  <depend>yaml_cpp</depend>
-
-  <depend>opencv</depend>
   
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

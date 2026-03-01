@@ -1,7 +1,8 @@
 // Copyright (C) 2024 Zheng Yu
 // Licensed under the MIT License.
-
 #include "atri_tracker/extended_kalman_filter.hpp"
+
+#include <functional>
 
 namespace atri_tracker
 {

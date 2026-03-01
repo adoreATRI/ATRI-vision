@@ -3,9 +3,6 @@
 
 #include <onnxruntime_cxx_api.h>
 
-#include <iostream>
-#include <memory>
-#include <string>
 #include <vector>
 
 namespace atri_detector
@@ -17,7 +14,7 @@ public:
   OnnxInference() = default;
   ~OnnxInference() = default;
 
-  bool loadEngine(const std::string & onnx_path = "");
+  bool loadOnnx(const std::string & onnx_path = "");
 
   bool infer(const std::vector<float> & input, std::vector<float> & output);
 

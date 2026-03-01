@@ -1,19 +1,15 @@
 // Copyright (C) 2024 Zheng Yu
 // Licensed under the MIT License.
 
-#ifndef BUFF_TRACKER__TRACKER_HPP_
-#define BUFF_TRACKER__TRACKER_HPP_
+#ifndef ATRI_TRACKER__TRACKER_HPP_
+#define ATRI_TRACKER__TRACKER_HPP_
+
+// ROS2
+#include <rclcpp/rclcpp.hpp>
 
 // interfaces
 #include <atri_interfaces/msg/color_block.hpp>
 #include <atri_interfaces/msg/color_block_array.hpp>
-
-// ros2
-#include <angles/angles.h>
-
-#include <rclcpp/logger.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 // Eigen
 #include <Eigen/Dense>
@@ -22,13 +18,7 @@
 #include "atri_tracker/extended_kalman_filter.hpp"
 #include "atri_tracker/gauss_newton_solver.hpp"
 
-// STD
-
-#include <memory>
-
 #define BUFF_R 160.0  // mm
-#define PI 3.1415926
-#define OMEGA 0.0
 
 namespace atri_tracker
 {
@@ -64,7 +54,6 @@ public:
     TRACKING,
     TEMP_LOST,
   } tracker_state;
-  std::unique_ptr<Tracker> tracker_;
 
   enum SolverStatus {
     WAITING,
@@ -119,4 +108,4 @@ private:
 };
 }  // namespace atri_tracker
 
-#endif  // BUFF_TRACKER__TRACKER_HPP_
+#endif  // ATRI_TRACKER__TRACKER_HPP_

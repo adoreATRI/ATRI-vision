@@ -2,37 +2,31 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>atri_tracker</name>
-  <version>0.0.1</version>
-  <description>TODO: Package description</description>
+  <version>1.0.0</version>
+  <description>
+    Tracker package use EKF and GNS to smooth the observations points
+    Subscribe the detect blocks topic detector/color_blocks
+    publish the tracker/rune topic and some markers for visualization
+  </description>
   <maintainer email="makochishima043@gmail.com">adore</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   
-  <build_depend>rclcpp</build_depend>
-  <build_depend>rclcpp_components</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>std_msgs</build_depend>
-  <build_depend>std_srvs</build_depend>
-  <build_depend>atri_interfaces</build_depend>
-  <build_depend>libopencv-dev</build_depend>
-  <build_depend>tf2_geometry_msgs</build_depend>
-  <build_depend>tf2_ros</build_depend>
-  <build_depend>angles</build_depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
 
-  <exec_depend>rclcpp</exec_depend>
-  <exec_depend>rclcpp_components</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>std_srvs</exec_depend>
-  <exec_depend>atri_interfaces</exec_depend>
-  <exec_depend>libopencv-dev</exec_depend>
-  <exec_depend>tf2_geometry_msgs</exec_depend>
-  <exec_depend>tf2_ros</exec_depend>
-  <exec_depend>angles</exec_depend>
-  
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>atri_interfaces</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+
+  <depend>tf2_ros</depend>
+
+  <depend>angles</depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

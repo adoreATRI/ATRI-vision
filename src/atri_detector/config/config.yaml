@@ -1,0 +1,7 @@
+YOLO:
+  input_size: 800
+  confidence_threshold: 0.4
+  iou_thresh: 0.45
+
+ColorFeature:
+  lock_votes_threshold: 30

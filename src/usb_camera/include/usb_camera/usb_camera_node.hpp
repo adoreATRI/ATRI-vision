@@ -1,14 +1,6 @@
-#ifndef USB_CAMERA_DRIVER__CAMERA_CAPTURE_NODE_HPP_
-#define USB_CAMERA_DRIVER__CAMERA_CAPTURE_NODE_HPP_
+#ifndef USB_CAMERA__USB_CAMERA_NODE_HPP_
+#define USB_CAMERA__USB_CAMERA_NODE_HPP_
 
-// V4L2
-#include <fcntl.h>
-#include <linux/videodev2.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
-// STD
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -21,14 +13,17 @@
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/compressed_image.hpp"
 
-namespace usb_camera_driver
+// YAML
+#include "yaml-cpp/yaml.h"
+
+namespace usb_camera
 {
 
-class CameraCaptureNode : public rclcpp::Node
+class USBCameraNode : public rclcpp::Node
 {
 public:
-  explicit CameraCaptureNode(const rclcpp::NodeOptions & options);
-  ~CameraCaptureNode();
+  explicit USBCameraNode(const rclcpp::NodeOptions & options);
+  ~USBCameraNode();
 
 private:
   struct V4L2Buffer
@@ -38,6 +33,7 @@ private:
   };
 
   // Paramters
+  YAML::Node cfg_;
   void declareParameters();
   rcl_interfaces::msg::SetParametersResult parametersCallback(
     const std::vector<rclcpp::Parameter> & parameters);
@@ -57,7 +53,6 @@ private:
   std::vector<V4L2Buffer> v4l2_buffers_;
 
   // parameters
-  std::string camera_name_;
   std::string camera_device_url_;
   OnSetParametersCallbackHandle::SharedPtr params_callback_handle_;
   int img_width_;
@@ -81,6 +76,6 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub_;
 };
 
-}  // namespace usb_camera_driver
+}  // namespace usb_camera
 
-#endif  // USB_CAMERA_DRIVER__CAMERA_CAPTURE_NODE_HPP_
+#endif  // USB_CAMERA__USB_CAMERA_NODE_HPP_

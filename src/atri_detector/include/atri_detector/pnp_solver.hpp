@@ -29,7 +29,6 @@ private:
   static constexpr float DIAGONAL_LENGTH = 133.13;
   static constexpr float CIRCLE_RADIUS = 40.0;
 
-  std::vector<cv::Point3f> circle_points_;
   cv::Mat camera_matrix_;
   cv::Mat dist_coeffs_;
 };

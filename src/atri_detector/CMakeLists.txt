@@ -12,20 +12,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
+
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(atri_interfaces REQUIRED)
-find_package(geometry_msgs REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED) 
+
+find_package(tf2 REQUIRED)
+
 find_package(ament_index_cpp REQUIRED)
 find_package(yaml-cpp REQUIRED)
-
-find_package(tf2_geometry_msgs REQUIRED)
-find_package(tf2_ros REQUIRED)
 
 find_package(OpenCV REQUIRED)
 
 # ==================== ONNX Runtime ====================
-set(ONNXRUNTIME_DIR $ENV{ONNXRUNTIME_HOME})
+set(ONNXRUNTIME_DIR $ENV{ONNXRUNTIME_DIR})
 find_path(ONNXRUNTIME_INCLUDE_DIR "onnxruntime_cxx_api.h" HINTS ${ONNXRUNTIME_DIR}/include)
 find_library(ONNXRUNTIME_LIB onnxruntime HINTS ${ONNXRUNTIME_DIR}/lib)
 find_library(ONNXRUNTIME_CUDA_LIB onnxruntime_providers_cuda HINTS ${ONNXRUNTIME_DIR}/lib)
@@ -43,53 +44,39 @@ add_library(detector SHARED
 )
 
 
-  
 # ================= 设置头文件目录 =================
-include_directories(include)
-
-target_include_directories(detector_node PUBLIC
+target_include_directories(detector_node PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+  $<BUILD_INTERFACE:${ONNXRUNTIME_INCLUDE_DIR}>
 )
-
-target_include_directories(detector PUBLIC
-$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-$<INSTALL_INTERFACE:include>
+target_include_directories(detector PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${ONNXRUNTIME_INCLUDE_DIR}>
 )
-
-
-target_include_directories(detector_node SYSTEM PRIVATE
-  ${ONNXRUNTIME_INCLUDE_DIR}
-)
-target_include_directories(detector SYSTEM PRIVATE
-  ${ONNXRUNTIME_INCLUDE_DIR}
-)
-
 
 
 # ================= 链接ros依赖 =================
 ament_target_dependencies(detector_node
 rclcpp
 rclcpp_components
+
 sensor_msgs
 std_msgs
 atri_interfaces
-geometry_msgs
 tf2_geometry_msgs
-tf2_ros
-ament_index_cpp
+
+tf2
 )
 
 ament_target_dependencies(detector
-rclcpp
 atri_interfaces
-geometry_msgs
+
+ament_index_cpp
 )
 
 # =============== 链接库 ================
 target_link_libraries(detector_node
   detector
-  yaml-cpp
 )
 
 target_link_libraries(detector
@@ -97,6 +84,7 @@ target_link_libraries(detector
   ${ONNXRUNTIME_LIB}
   ${ONNXRUNTIME_CUDA_LIB}
   ${ONNXRUNTIME_SHARED_LIB}
+
   yaml-cpp
 )
 
@@ -108,14 +96,14 @@ rclcpp_components_register_node(detector_node
 )
 
 # ================ 安装 =================
-install(DIRECTORY include/
-  DESTINATION include
-)
-
 install(TARGETS detector detector_node
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY config launch model
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 if(BUILD_TESTING)

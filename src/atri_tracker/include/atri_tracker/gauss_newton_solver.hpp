@@ -4,12 +4,13 @@
 #ifndef ATRI_TRACKER__GAUSS_NEWTON_SOLVER_HPP_
 #define ATRI_TRACKER__GAUSS_NEWTON_SOLVER_HPP_
 
-#include <chrono>
+// Eigen
 #include <eigen3/Eigen/Cholesky>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/QR>
 #include <eigen3/Eigen/SVD>
-#include <functional>
+
+// CTL
 #include <vector>
 
 namespace atri_tracker

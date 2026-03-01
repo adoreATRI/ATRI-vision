@@ -3,6 +3,15 @@
 
 #include "atri_tracker/tracker.hpp"
 
+// ROS2
+#include <angles/angles.h>
+
+#include <rclcpp/logger.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
+// STD
+#include <memory>
+
 namespace atri_tracker
 {
 Tracker::Tracker(double max_match_theta, double max_match_center_xoy)
@@ -46,7 +55,7 @@ void Tracker::initEKF(const block_target & block_tracked)
   double zc = block_tracked.center_position.z;
   double r = BUFF_R / 1000;
   double theta = block_tracked.theta;
-  double omega = OMEGA;
+  double omega = 0.0;
   target_state = Eigen::VectorXd::Zero(9);
   target_state << xc, yc, zc, 0, 0, 0, r, theta, omega;
   ekf.setInitState(target_state);
@@ -236,8 +245,6 @@ void Tracker::calculateMeasurementFromPrediction(
 void Tracker::getTrackerPosition(block_target & block)
 {
   calculateMeasurementFromPrediction(block, target_state);
-  block.theta = angles::normalize_angle(block.theta);
-  block.block_position = block.block_position;
 }
 
 Tracker::block_target Tracker::getTargetBlock(
@@ -289,7 +296,7 @@ void Tracker::updateRotationAxis(const Eigen::Vector3d & measured_axis)
     rotation_basis.rotation_axis = axis;
     rotation_basis.init = true;
   } else {
-    double alpha = 0.8;
+    double alpha = 0.3;
     rotation_basis.rotation_axis =
       (alpha * axis + (1.0 - alpha) * rotation_basis.rotation_axis).normalized();
   }

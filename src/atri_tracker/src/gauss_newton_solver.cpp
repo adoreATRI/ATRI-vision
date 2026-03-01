@@ -3,6 +3,10 @@
 
 #include "atri_tracker/gauss_newton_solver.hpp"
 
+// C++
+#include <chrono>
+#include <functional>
+
 namespace atri_tracker
 {
 GaussNewtonSolver::GaussNewtonSolver(

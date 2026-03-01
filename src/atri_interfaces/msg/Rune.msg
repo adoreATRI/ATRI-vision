@@ -2,6 +2,8 @@ std_msgs/Header header
 bool tracking
 geometry_msgs/Point position
 geometry_msgs/Vector3 velocity
+geometry_msgs/Vector3 axis_u
+geometry_msgs/Vector3 axis_v
 float64 r
 float64 theta
 float64 a

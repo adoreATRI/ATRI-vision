@@ -4,40 +4,30 @@
 #ifndef ATRI_TRACKER__TRACKER_NODE_HPP_
 #define ATRI_TRACKER__TRACKER_NODE_HPP_
 
-// ROS
-#include <message_filters/subscriber.h>
+// TF2
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/create_timer_ros.h>
 #include <tf2_ros/message_filter.h>
 #include <tf2_ros/transform_listener.h>
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
-#include <geometry_msgs/msg/pose_array.hpp>
+// ROS2
+#include <message_filters/subscriber.h>
+
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
 // interfaces
 #include <atri_interfaces/msg/color_block.hpp>
 #include <atri_interfaces/msg/color_block_array.hpp>
 #include <atri_interfaces/msg/rune.hpp>
-#include <atri_interfaces/msg/rune_info.hpp>
 
 // tracker
 #include "atri_tracker/extended_kalman_filter.hpp"
 #include "atri_tracker/tracker.hpp"
 
-// STD
-#include <memory>
-#include <string>
+// C++
 #include <vector>
-
-// Eigen
-#include <Eigen/Dense>
-
-// YAML
-#include <yaml-cpp/yaml.h>
 
 namespace atri_tracker
 {
@@ -50,16 +40,18 @@ public:
 
 private:
   void colorBlockCallback(const atri_interfaces::msg::ColorBlockArray::SharedPtr color_block_msg);
-  double dt_ = 0.01;
 
   rclcpp::Time last_time_;
+  double dt_ = 0.03;
 
   // Threshold
   double lost_time_threshold_;
 
   std::unique_ptr<Tracker> tracker_;
 
-  // Param
+  // EKF
+  void initEKF();
+  // EKF Params
   double s2qxyz_;
   double s2qtheta_;
   double s2qr_;
@@ -68,6 +60,8 @@ private:
   double r_block_min_;
   double r_center_min_;
 
+  // GNS
+  void initGNS();
   // GNS Params
   double min_a_;
   double max_a_;
@@ -90,11 +84,11 @@ private:
   message_filters::Subscriber<atri_interfaces::msg::ColorBlockArray> color_block_sub_;
   std::shared_ptr<tf2_filter> tf2_filter_;
 
-  // TF tree
-
   // Publishers
   rclcpp::Publisher<atri_interfaces::msg::Rune>::SharedPtr rune_publisher_;
-  rclcpp::Publisher<atri_interfaces::msg::RuneInfo>::SharedPtr rune_info_publisher_;
+
+  // Subscribers
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr keyboard_control_sub_;
 
   // Visualization
   void initVisualization();
@@ -106,11 +100,8 @@ private:
   visualization_msgs::msg::Marker center_marker_;
   visualization_msgs::msg::Marker measure_marker_;
 
-  // EKF
-  void initEKF();
-
-  // GNS
-  void initGNS();
+  // Task mode
+  std::string task_mode_ = "large_buff";
 };
 
 }  // namespace atri_tracker
