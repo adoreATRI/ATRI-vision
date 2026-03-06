@@ -42,14 +42,15 @@ ATRISerialDriver::ATRISerialDriver(const rclcpp::NodeOptions & options)
   tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
 
   // Create publishers
-  time_info_pub_ = this->create_publisher<atri_interfaces::msg::TimeInfo>("time_info", 10);
+  time_info_pub_ =
+    this->create_publisher<atri_interfaces::msg::TimeInfo>("serial_driver/time_info", 10);
 
   // Receive thread
   receive_thread_ = std::thread(&ATRISerialDriver::receiveData, this);
 
   // Subscribers
   rune_sub_.subscribe(this, "tracker/rune");
-  time_info_sub_.subscribe(this, "tracker/time_info");
+  time_info_sub_.subscribe(this, "serial_driver/time_info");
   keyboard_control_sub_ = this->create_subscription<std_msgs::msg::String>(
     "keyboard_node/key", 10,
     std::bind(&ATRISerialDriver::keyboardControlCallback, this, std::placeholders::_1));

@@ -1,7 +1,7 @@
 atri_serial_driver:
   ros__parameters:
     device_name: "/dev/ttyUSB0"
-    baud_rate: 115200
+    baud_rate: 9600
     flow_control: "none"  ## none, software, hardware
     parity: "none"        ## none, odd, even
     stop_bits: "1.0"     ## 1, 1.5, 2

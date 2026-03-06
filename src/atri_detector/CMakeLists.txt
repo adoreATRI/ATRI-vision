@@ -71,6 +71,7 @@ tf2
 ament_target_dependencies(detector
 atri_interfaces
 
+rclcpp
 ament_index_cpp
 )
 

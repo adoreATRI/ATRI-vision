@@ -18,7 +18,9 @@
 #include "atri_tracker/extended_kalman_filter.hpp"
 #include "atri_tracker/gauss_newton_solver.hpp"
 
-#define BUFF_R 160.0  // mm
+// mm
+/* #define BUFF_R 160.0 */
+#define BUFF_R 60.0
 
 namespace atri_tracker
 {

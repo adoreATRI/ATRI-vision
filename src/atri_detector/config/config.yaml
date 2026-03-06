@@ -4,4 +4,4 @@ YOLO:
   iou_thresh: 0.45
 
 ColorFeature:
-  lock_votes_threshold: 30
+  lock_votes_threshold: 15

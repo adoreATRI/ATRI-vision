@@ -160,8 +160,6 @@ bool USBCameraNode::openCameraV4L2()
 
 void USBCameraNode::closeCameraV4L2()
 {
-  std::lock_guard<std::mutex> lock(mutex_);
-
   if (v4l2_fd_ >= 0) {
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     ioctl(v4l2_fd_, VIDIOC_STREAMOFF, &type);

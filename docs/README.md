@@ -16,9 +16,9 @@ ros2 launch bringup launch.py
 在`ATRI_vision`的根目录终端运行以下命令：
 ```bash
 source install/setup.bash
-python3 ./src/atri_keyboard/keyboard_node.py
+ros2 run atri_keyboard keyboard_node
 ```
-其中r控制重置检测器和追踪器状态，并切换能量机关模式
+其中r控制重置检测器和追踪器状态，并切换能量机关模式  
 s控制数据的发送
 
 

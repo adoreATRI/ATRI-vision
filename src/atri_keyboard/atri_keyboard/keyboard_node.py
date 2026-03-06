@@ -2,8 +2,10 @@ import sys
 import tty
 import termios
 import select
-import rclpy
+
 import time
+
+import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 

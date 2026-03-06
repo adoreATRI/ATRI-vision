@@ -4,6 +4,7 @@
   <name>atri_serial_driver</name>
   <version>1.0.0</version>
   <description>
+    Forked from the rm_serial_driver project.
     Serial driver and solve the angles to the target
     Subscribe the moothed target position
     Send the packet to the serial port

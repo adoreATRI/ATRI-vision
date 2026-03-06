@@ -9,6 +9,7 @@
 
 // ROS2
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <rclcpp/logging.hpp>
 
 namespace atri_detector
 {
@@ -269,6 +270,7 @@ void Detector::findTargetBlock(const cv::Mat & image, std::vector<ColorBlock> & 
         votes_.push_back(vote);
       }
       is_vote_started_ = true;
+      RCLCPP_INFO(rclcpp::get_logger("Detector"), "Vote init");
     } else {
       // Find the best block
       cv::Mat best_block_hist;
@@ -290,6 +292,7 @@ void Detector::findTargetBlock(const cv::Mat & image, std::vector<ColorBlock> & 
       if (votes_[0].vote_count >= lock_votes_threshold_) {
         locked = true;
         locked_hist_ = votes_[0].hist.clone();
+        RCLCPP_INFO(rclcpp::get_logger("Detector"), "Locked the target block");
       }
     }
   } else {  // Locked period

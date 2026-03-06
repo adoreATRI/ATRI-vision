@@ -1,6 +1,3 @@
-// Copyright (C) 2024 Zheng Yu
-// Licensed under the MIT License.
-
 #ifndef ATRI_DETECTOR__PNP_SOLVER_HPP_
 #define ATRI_DETECTOR__PNP_SOLVER_HPP_
 
@@ -22,12 +19,11 @@ public:
 
   bool solvePnP(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec);
   std::vector<cv::Point3f> block_points;
-  /*   bool solvePnP_circle(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tvec); */
 
 private:
   // Unit: mm
-  static constexpr float DIAGONAL_LENGTH = 133.13;
-  static constexpr float CIRCLE_RADIUS = 40.0;
+  /*   static constexpr float DIAGONAL_LENGTH = 133.13; */
+  static constexpr float DIAGONAL_LENGTH = 42.42;
 
   cv::Mat camera_matrix_;
   cv::Mat dist_coeffs_;

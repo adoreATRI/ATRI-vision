@@ -4,6 +4,7 @@
   <name>atri_tracker</name>
   <version>1.0.0</version>
   <description>
+    Fork from rm_buff project.
     Tracker package use EKF and GNS to smooth the observations points
     Subscribe the detect blocks topic detector/color_blocks
     publish the tracker/rune topic and some markers for visualization

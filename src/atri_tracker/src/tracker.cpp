@@ -186,8 +186,8 @@ void Tracker::solve(const rclcpp::Time & time)
       while (gns.solve() != GaussNewtonSolver::SUCCESS) {
         Eigen::VectorXd xn = gns.getState();
         xn(2) += 0.5;
-        if (xn(2) > 8) {
-          xn(2) -= 8;
+        if (xn(2) > 2 * M_PI) {
+          xn(2) -= 2 * M_PI;
         }
         gns.setStartValue(xn);
         fail_count++;
