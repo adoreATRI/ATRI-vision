@@ -16,7 +16,7 @@ class KeyboardNode(Node):
         self.keyboard_control_pub_ = self.create_publisher(String, 'keyboard_node/key', 10)
     
 
-    def send_key(self, key):
+    def _send_key(self, key):
         msg = String()
         msg.data = key
         self.keyboard_control_pub_.publish(msg)
@@ -44,8 +44,12 @@ def main(args=None):
                 break
             if key == 'r':
                 print("Resetting detector.")
+            if key == 's':
+                print("Starting control.")
+            if key == 'f':
+                print("False tracking.")
            
-            keyboard_node.send_key(key)
+            keyboard_node._send_key(key)
         time.sleep(0.001)
         
     

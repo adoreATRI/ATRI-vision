@@ -1,8 +1,27 @@
-## ATRI_vision环境配置
-模型通过ONNX Runtime推理的
+## 目录
+- [功能介绍](#功能介绍)
+- [部署](#部署)
+- [ATRI_vision编译和运行](#ATRI_vision编译和运行)
+- [按键控制节点的运行](#按键控制节点的运行)
+- [其他工具的使用](#其他工具的使用)
 
-### onnxruntime配置
-在`~/.bashrc`中添加`export ONNXRUNTIME_DIR=/home/*/onnxruntime-linux-x64-gpu-*`版本根据自己gpu型号选择
+## 功能介绍
+usb_camera功能包：使用l4v2的api进行开发，有重连机制，发布图像话题
+detector：使用yolov8模型获得roi，再使用传统opencv进行图像处理，色块检测采用hs直方图作为特征进行匹配，采用学习-锁定机制与圆形色块解耦并增强鲁棒性
+tracker：参考华师的开源，使用EKF和GNS对检测结果进行平滑和预测
+serial_driver：参考华师的开源，增加了角度解算和按键控制等功能
+
+## 部署
+- ONNXRuntime
+下载对应适合自己系统的版本，在.bashrc中添加以下内容：
+```bash
+export ONNXRUNTIME_DIR=/home/adore/onnxruntime-*
+```
+
+同时修改部分参数
+- atri_detector的pnp_solver的目标长度大小
+- atri_tracker中tracker.hpp中BUFF_R的大小
+- atri_serial_driver中的tf树调整
 
 ## ATRI_vision编译和运行
 在`ATRI_vision`的根目录终端运行以下命令：

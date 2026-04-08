@@ -4,9 +4,11 @@ from launch_ros.descriptions import ComposableNode
 
 from ament_index_python.packages import get_package_share_directory
 import os
+import yaml
+
+
 
 def generate_launch_description():
-
     camera_config = os.path.join(
       get_package_share_directory('usb_camera'),
         'config',
@@ -24,6 +26,16 @@ def generate_launch_description():
         'config',
         'config.yaml'
     )
+
+    rviz_config = os.path.join(
+        get_package_share_directory('bringup'),
+        'config',
+        'debug.rviz'
+    )
+
+    with open(serial_config, 'r') as f:
+        config_params = yaml.safe_load(f)
+    serial_params = config_params['atri_serial_driver']['ros__parameters']
 
     container = ComposableNodeContainer(
         name='vision_container',
@@ -72,15 +84,36 @@ def generate_launch_description():
             Node(
                 package='tf2_ros',
                 executable='static_transform_publisher',
-                name='base_to_camera',
-                arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'camera_link']
+                name='gimbal_to_camera',
+                arguments=['0', str(serial_params['tf_offset']['camera_link']['y']), '0', '0', '0', '0', 'gimbal_pitch', 'camera_link']
             ),
-                       
+
+            #Debug
+            # Node(
+            #     package='tf2_ros',
+            #     executable='static_transform_publisher',
+            #     name='gimbal_to_camera',
+            #     arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'camera_link']
+            # ),
+
             Node(
                 package='tf2_ros',
                 executable='static_transform_publisher',
                 name='camera_to_optical',
                 arguments=['0', '0', '0', '-1.5708', '0', '-1.5708', 'camera_link', 'camera_optical_frame']
+            ),
+
+            Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                name='camera_to_laser',
+                arguments=['0', str(serial_params['tf_offset']['laser_link']['y']), '0', '0', '0', '0', 'camera_link', 'laser_link']
+            ),
+
+            Node(
+                package='rviz2',
+                executable='rviz2',
+                arguments=['-d', rviz_config]
             ),
            
             container])

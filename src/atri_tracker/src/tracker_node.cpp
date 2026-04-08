@@ -6,6 +6,7 @@
 // C++
 #include <memory>
 #include <string>
+#include <thread>
 
 // ROS2
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -21,8 +22,8 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
 {
   // Parameters
   target_frame_ = this->declare_parameter("target_frame", "odom");
-  double max_match_theta = this->declare_parameter("tracker.max_match_theta", 1.5);
-  double max_match_center_xoy = this->declare_parameter("tracker.max_match_center_xoy", 0.628);
+  double max_match_theta = this->declare_parameter("tracker.max_match_theta", 0.628);
+  double max_match_center_xoy = this->declare_parameter("tracker.max_match_center_xoy", 1.5);
   lost_time_threshold_ = this->declare_parameter("tracker.lost_time_threshold", 0.5);
   tracker_ = std::make_unique<Tracker>(max_match_theta, max_match_center_xoy);
   tracker_->tracking_threshold = this->declare_parameter("tracker.tracking_threshold", 10);
@@ -54,6 +55,9 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
         RCLCPP_INFO(
           rclcpp::get_logger("TrackerNode"), "Reset tracker, Task mode switched to: %s",
           task_mode_.c_str());
+      } else if (msg->data == "f") {
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        tracker_->tracker_state = Tracker::State::LOST;
       }
     });
 

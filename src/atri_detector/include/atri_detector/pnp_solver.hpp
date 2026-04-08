@@ -22,8 +22,9 @@ public:
 
 private:
   // Unit: mm
-  /*   static constexpr float DIAGONAL_LENGTH = 133.13; */
-  static constexpr float DIAGONAL_LENGTH = 42.42;
+  // static constexpr float DIAGONAL_LENGTH = 133.13;
+  // static constexpr float DIAGONAL_LENGTH = 39.59;  // 28mm debug
+  static constexpr float DIAGONAL_LENGTH = 55.15;  // 39mm
 
   cv::Mat camera_matrix_;
   cv::Mat dist_coeffs_;

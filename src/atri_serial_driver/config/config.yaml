@@ -1,7 +1,23 @@
 atri_serial_driver:
   ros__parameters:
     device_name: "/dev/ttyUSB0"
-    baud_rate: 9600
+    baud_rate: 38400
     flow_control: "none"  ## none, software, hardware
     parity: "none"        ## none, odd, even
     stop_bits: "1.0"     ## 1, 1.5, 2
+
+    timestamp_offset: 165.0
+
+    tf_offset:
+        gimbal_yaw:
+            z: 0.0855
+
+        gimbal_pitch:
+            y: -0.00919
+            z: 0.039
+          
+        camera_link:
+            y: -0.0364
+          
+        laser_link:
+            y: -0.03009

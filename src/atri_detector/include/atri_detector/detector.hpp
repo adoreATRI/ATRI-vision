@@ -29,15 +29,16 @@ public:
   Detector();
   int rect_count = 0;
 
-  // Debug
-  void drawDetectedBlocks(
-    cv::Mat & image, const std::vector<ColorBlock> & blocks,
-    const std::vector<YoloDetection> & yolo_result);
-
   // Detector ColorBlocks
   std::vector<ColorBlock> Detect(cv::Mat & image);
   void resetDetector();
   bool locked = false;
+
+private:
+  // Debug
+  void drawDetectedBlocks(
+    cv::Mat & image, const std::vector<ColorBlock> & blocks,
+    const std::vector<YoloDetection> & yolo_result);
 
   // Process image
   std::vector<std::vector<cv::Point>> processImage(cv::Mat image);
@@ -57,14 +58,7 @@ public:
   void findTargetBlock(const cv::Mat & image, std::vector<ColorBlock> & blocks);
   void findBestBlock(
     const cv::Mat & image, std::vector<ColorBlock> & blocks, cv::Mat & best_block_hist);
-  cv::Mat computeCircleHistogram(const cv::Mat & image, const ColorBlock & circle_block);
-  cv::Mat computeHSHistogram(const cv::Mat & image, const ColorBlock & block);
 
-  // Calculate
-  bool calculateCircularity(const std::vector<cv::Point> & contour);
-  void sortCorners(const cv::Point2f & yolo_kpt, std::vector<cv::Point2f> & kpts);
-
-private:
   // YOLO & ONNX Runtime
   std::unique_ptr<OnnxInference> onnx_;
   std::vector<YoloDetection> getYoloResult(const cv::Mat & image);
@@ -91,6 +85,13 @@ private:
   // Config
   YAML::Node cfg_;
 };
+
+cv::Mat computeCircleHistogram(const cv::Mat & image, const ColorBlock & circle_block);
+cv::Mat computeHSHistogram(const cv::Mat & image, const ColorBlock & block);
+
+// Calculate
+bool calculateCircularity(const std::vector<cv::Point> & contour);
+void sortCorners(const cv::Point2f & yolo_kpt, std::vector<cv::Point2f> & kpts);
 
 }  // namespace atri_detector
 

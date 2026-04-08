@@ -101,7 +101,7 @@ private:
   visualization_msgs::msg::Marker measure_marker_;
 
   // Task mode
-  std::string task_mode_ = "large_buff";
+  std::string task_mode_ = "small_buff";
 };
 
 }  // namespace atri_tracker

@@ -14,7 +14,6 @@ namespace atri_serial_driver
 struct ReceivePacket
 {
   uint8_t header = 0x5A;
-  float roll;
   float pitch;
   float yaw;
   uint32_t timestamp;
@@ -24,9 +23,9 @@ struct ReceivePacket
 struct SendPacket
 {
   uint8_t header = 0xA5;
-  uint8_t state : 1;  // 0-untracking 1-tracking
-  float yaw;
+  uint8_t state;  // 0: lost, 1: tracking, 2: false tracking
   float pitch;
+  float yaw;
   uint32_t cap_timestamp;
   uint16_t t_offset;
   uint16_t checksum = 0;

@@ -365,7 +365,7 @@ void Detector::drawDetectedBlocks(
   }
 }
 
-bool Detector::calculateCircularity(const std::vector<cv::Point> & contour)
+bool calculateCircularity(const std::vector<cv::Point> & contour)
 {
   double area = cv::contourArea(contour);
   double perimeter = cv::arcLength(contour, true);
@@ -378,7 +378,7 @@ bool Detector::calculateCircularity(const std::vector<cv::Point> & contour)
   return circularity > 0.8;
 }
 
-void Detector::sortCorners(const cv::Point2f & yolo_kpt, std::vector<cv::Point2f> & kpts)
+void sortCorners(const cv::Point2f & yolo_kpt, std::vector<cv::Point2f> & kpts)
 {
   if (kpts.size() != 5) return;
 
@@ -431,7 +431,7 @@ void Detector::sortCorners(const cv::Point2f & yolo_kpt, std::vector<cv::Point2f
   kpts = sorted;
 };
 
-cv::Mat Detector::computeCircleHistogram(const cv::Mat & image, const ColorBlock & circle_block)
+cv::Mat computeCircleHistogram(const cv::Mat & image, const ColorBlock & circle_block)
 {
   cv::Mat image_hsv;
   cv::cvtColor(image, image_hsv, cv::COLOR_BGR2HSV);
@@ -584,7 +584,7 @@ void Detector::nms(std::vector<YoloDetection> & result)
   result = result_filtered;
 }
 
-cv::Mat Detector::computeHSHistogram(const cv::Mat & image, const ColorBlock & block)
+cv::Mat computeHSHistogram(const cv::Mat & image, const ColorBlock & block)
 {
   cv::Mat image_hsv;
   cv::cvtColor(image, image_hsv, cv::COLOR_BGR2HSV);

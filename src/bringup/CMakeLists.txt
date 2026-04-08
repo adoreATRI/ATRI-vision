@@ -7,8 +7,10 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 
+find_package(yaml REQUIRED)
+
 install(
-  DIRECTORY launch
+  DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
 

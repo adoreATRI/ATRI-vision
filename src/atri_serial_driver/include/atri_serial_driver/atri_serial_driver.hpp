@@ -47,7 +47,6 @@ private:
   void sendData(
     const atri_interfaces::msg::Rune::ConstSharedPtr & rune_msg,
     const atri_interfaces::msg::TimeInfo::ConstSharedPtr & time_info_msg);
-  bool started_send_{false};
 
   // Solve attitude
   void solveAttitude(
@@ -72,8 +71,14 @@ private:
   // TF
   double timestamp_offset_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-  std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
-  std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
+
+  // offset
+  double yaw_z_;
+  double pitch_y_;
+  double pitch_z_;
+  double camera_link_y_;
+  double laser_link_y_;
+
   // Publishers
   rclcpp::Publisher<atri_interfaces::msg::TimeInfo>::SharedPtr time_info_pub_;
 
@@ -84,6 +89,8 @@ private:
 
   // keyboard control
   void keyboardControlCallback(const std_msgs::msg::String::ConstSharedPtr msg);
+  bool started_send_{false};
+  void sendFalseCommand();
 
   // Synchronizer
   typedef message_filters::sync_policies::ApproximateTime<
@@ -92,6 +99,7 @@ private:
   typedef message_filters::Synchronizer<syncpolicy> Sync;
   std::unique_ptr<Sync> sync_;
 };
+
 }  // namespace atri_serial_driver
 
 #endif  // ATRI_SERIAL_DRIVER__ATRI_SERIAL_DRIVER_HPP_

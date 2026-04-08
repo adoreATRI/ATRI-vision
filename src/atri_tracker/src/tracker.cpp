@@ -291,30 +291,26 @@ Tracker::block_target Tracker::getTargetBlock(
 
 void Tracker::updateRotationAxis(const Eigen::Vector3d & measured_axis)
 {
-  Eigen::Vector3d axis = measured_axis.normalized();
+  Eigen::Vector3d axis(measured_axis.x(), measured_axis.y(), 0.0);
+  if (axis.norm() < 1e-6) {
+    return;
+  }
+  axis.normalize();
+
   if (!rotation_basis.init) {
     rotation_basis.rotation_axis = axis;
     rotation_basis.init = true;
   } else {
-    double alpha = 0.3;
+    double alpha = 0.1;
     rotation_basis.rotation_axis =
       (alpha * axis + (1.0 - alpha) * rotation_basis.rotation_axis).normalized();
   }
 
-  double n_h = sqrt(
-    rotation_basis.rotation_axis.x() * rotation_basis.rotation_axis.x() +
-    rotation_basis.rotation_axis.y() * rotation_basis.rotation_axis.y());
-  if (n_h < 1e-6) {
-    Eigen::Vector3d x_axis(1, 0, 0);
-    rotation_basis.v = rotation_basis.rotation_axis.cross(x_axis).normalized();
-    rotation_basis.u = rotation_basis.v.cross(rotation_basis.rotation_axis).normalized();
-  } else {
-    double nz = rotation_basis.rotation_axis.z();
     double nx = rotation_basis.rotation_axis.x();
     double ny = rotation_basis.rotation_axis.y();
-    rotation_basis.u = Eigen::Vector3d(-nz * nx / n_h, -nz * ny / n_h, n_h);
-    rotation_basis.v = Eigen::Vector3d(ny / n_h, -nx / n_h, 0);
-  }
+
+    rotation_basis.u = Eigen::Vector3d(0.0, 0.0, 1.0);
+    rotation_basis.v = Eigen::Vector3d(ny, -nx, 0.0);
 }
 
 }  // namespace atri_tracker

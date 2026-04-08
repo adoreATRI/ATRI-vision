@@ -20,7 +20,8 @@
 
 // mm
 /* #define BUFF_R 160.0 */
-#define BUFF_R 60.0
+// #define BUFF_R 56.0
+#define BUFF_R 78.0
 
 namespace atri_tracker
 {

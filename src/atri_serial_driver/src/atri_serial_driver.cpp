@@ -33,13 +33,19 @@ ATRISerialDriver::ATRISerialDriver(const rclcpp::NodeOptions & options)
   owned_ctx_{new IoContext(2)},
   serial_driver_{new drivers::serial_driver::SerialDriver(*owned_ctx_)}
 {
+  // Parameters
+  // Serial
   getParams();
+  // offset
+  yaw_z_ = this->declare_parameter("tf_offset.gimbal_yaw.z", 0.0855);
+  pitch_y_ = this->declare_parameter("tf_offset.gimbal_pitch.y", -0.00919);
+  pitch_z_ = this->declare_parameter("tf_offset.gimbal_pitch.z", 0.039);
+  camera_link_y_ = this->declare_parameter("tf_offset.camera_link.y", -0.0364);
+  laser_link_y_ = this->declare_parameter("tf_offset.laser_link.y", -0.03009);
 
   // TF broadcaster
   timestamp_offset_ = this->declare_parameter("timestamp_offset", 0.0);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
-  tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
 
   // Create publishers
   time_info_pub_ =
@@ -91,6 +97,7 @@ void ATRISerialDriver::receiveData()
           serial_driver_->port()->open();
         }
         port_connected_ = true;
+
       } catch (const std::exception & ex) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         continue;
@@ -110,24 +117,49 @@ void ATRISerialDriver::receiveData()
         bool crc_ok =
           crc16::Verify_CRC16_Check_Sum(reinterpret_cast<const uint8_t *>(&packet), sizeof(packet));
         if (crc_ok) {
-          // Publish the TF from odon to the gimbal_link
-          geometry_msgs::msg::TransformStamped tf_msg;
-          timestamp_offset_ = this->get_parameter("timestamp_offset").as_double();
-          tf_msg.header.stamp = this->now() - rclcpp::Duration::from_seconds(timestamp_offset_);
-          tf_msg.header.frame_id = "odom";
-          tf_msg.child_frame_id = "gimbal_link";
-          tf2::Quaternion q;
-          q.setRPY(packet.roll, packet.pitch, packet.yaw);
-          tf_msg.transform.rotation = tf2::toMsg(q);
-          tf_broadcaster_->sendTransform(tf_msg);
+          geometry_msgs::msg::TransformStamped yaw_tf_msg;
+          geometry_msgs::msg::TransformStamped pitch_tf_msg;
+
+          RCLCPP_INFO(
+            get_logger(), "Received packet: yaw=%.3f, pitch=%.3f, timestamp=%u, CRC=0x%04X",
+            packet.yaw, packet.pitch, packet.timestamp, packet.checksum);
+
+          // yaw
+          yaw_tf_msg.header.stamp = this->now();
+          yaw_tf_msg.header.frame_id = "base_link";
+          yaw_tf_msg.child_frame_id = "gimbal_yaw";
+          // rotation
+          tf2::Quaternion q_yaw;
+          q_yaw.setRPY(0.0, 0.0, packet.yaw);
+          yaw_tf_msg.transform.rotation = tf2::toMsg(q_yaw);
+          // translation
+          yaw_tf_msg.transform.translation.x = 0.0;
+          yaw_tf_msg.transform.translation.y = 0.0;
+          yaw_tf_msg.transform.translation.z = yaw_z_;
+
+          // pitch
+          pitch_tf_msg.header.stamp = yaw_tf_msg.header.stamp;
+          pitch_tf_msg.header.frame_id = "gimbal_yaw";
+          pitch_tf_msg.child_frame_id = "gimbal_pitch";
+          // rotation
+          tf2::Quaternion q_pitch;
+          q_pitch.setRPY(0.0, (M_PI / 2) - packet.pitch, 0.0);
+          pitch_tf_msg.transform.rotation = tf2::toMsg(q_pitch);
+          // translation
+          pitch_tf_msg.transform.translation.x = 0.0;
+          pitch_tf_msg.transform.translation.y = pitch_y_;
+          pitch_tf_msg.transform.translation.z = pitch_z_;
+
+          tf_broadcaster_->sendTransform(yaw_tf_msg);
+          tf_broadcaster_->sendTransform(pitch_tf_msg);
 
           // Publish time
           atri_interfaces::msg::TimeInfo time_info_msg;
-          time_info_msg.header = tf_msg.header;
+          time_info_msg.header = pitch_tf_msg.header;
           time_info_msg.time = packet.timestamp;
           time_info_pub_->publish(time_info_msg);
         } else {
-          RCLCPP_ERROR(get_logger(), "CRC error!");
+          RCLCPP_ERROR(get_logger(), "CRC error!, CRC= %04X", packet.checksum);
         }
       } else {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 20, "Invalid header: %02X", header[0]);
@@ -150,18 +182,8 @@ void ATRISerialDriver::sendData(
       SendPacket packet;
       packet.state = rune->tracking ? 1 : 0;
       packet.cap_timestamp = time_info->time;
-      // Calculate time offset
-      if (rune->w == 0) {
-        packet.t_offset = 0;
-      } else {
-        int T = abs(2 * M_PI / rune->w * 1000);
-        int offset = (rune->t_offset - time_info->time % T) % T;
-        if (offset < 0) {
-          packet.t_offset = T + offset;
-        } else {
-          packet.t_offset = offset;
-        }
-      }
+      packet.t_offset = timestamp_offset_;
+
       // Solve attitude
       solveAttitude(rune, packet);
 
@@ -169,6 +191,9 @@ void ATRISerialDriver::sendData(
 
       std::vector<uint8_t> data = toVector(packet);
       serial_driver_->port()->send(data);
+      RCLCPP_INFO(
+        get_logger(), "Sent packet: state=%d, yaw=%.3f, pitch=%.3f, cap_timestamp=%u, t_offset=%u",
+        packet.state, packet.yaw, packet.pitch, packet.cap_timestamp, packet.t_offset);
 
     } catch (const std::exception & ex) {
       RCLCPP_ERROR(get_logger(), "Error while sending data: %s", ex.what());
@@ -189,7 +214,7 @@ void ATRISerialDriver::getParams()
   auto sb = StopBits::ONE;
 
   try {
-    device_name_ = declare_parameter<std::string>("device_name", "");
+    device_name_ = declare_parameter<std::string>("device_name", "/dev/ttyUSB0");
   } catch (rclcpp::ParameterTypeException & ex) {
     RCLCPP_ERROR(get_logger(), "The device name provided was invalid");
     throw ex;
@@ -276,6 +301,10 @@ void ATRISerialDriver::keyboardControlCallback(const std_msgs::msg::String::Cons
   } else if (command == "s") {
     started_send_ = true;
     RCLCPP_INFO(get_logger(), "Start sending data");
+  } else if (command == "f") {
+    started_send_ = false;
+    sendFalseCommand();
+    RCLCPP_INFO(get_logger(), "False tracking");
   }
 }
 
@@ -312,22 +341,40 @@ void ATRISerialDriver::solveAttitude(
   predicted_pos.y() = cy + r * (cos(theta_future) * axis_u.y() + sin(theta_future) * axis_v.y());
   predicted_pos.z() = cz + r * (cos(theta_future) * axis_u.z() + sin(theta_future) * axis_v.z());
 
-  // Transform the frame
-  auto transform = tf2_buffer_->lookupTransform("gimbal_link", "odom", tf2::TimePointZero);
-  geometry_msgs::msg::PointStamped pt_odom, pt_gimbal;
-  pt_odom.header.frame_id = "odom";
-  pt_odom.point.x = predicted_pos.x();
-  pt_odom.point.y = predicted_pos.y();
-  pt_odom.point.z = predicted_pos.z();
-  tf2::doTransform(pt_odom, pt_gimbal, transform);
+  // Calculate the attitude using inverse kinematics
+  double dx = predicted_pos.x();
+  double dy = predicted_pos.y();
+  double dz = predicted_pos.z();
 
-  // Calculate the attitude
-  double dx = pt_gimbal.point.x;
-  double dy = pt_gimbal.point.y;
-  double dz = pt_gimbal.point.z;
+  double y_offset = pitch_y_ + camera_link_y_ + laser_link_y_;
+  double z_offset = yaw_z_ + pitch_z_;
 
-  packet.yaw = atan2(dy, dx);
-  packet.pitch = atan2(dz, sqrt(dx * dx + dy * dy));
+  double distance_xy = sqrt(dx * dx + dy * dy);
+
+  if (distance_xy > fabs(y_offset)) {
+    packet.yaw = atan2(dy, dx) - asin(y_offset / distance_xy);
+
+    double distance_shot = sqrt(distance_xy * distance_xy - y_offset * y_offset);
+    double elevation = atan2(dz - z_offset, distance_shot);
+
+    packet.pitch = elevation + M_PI / 2.0;
+  } else {
+    packet.yaw = atan2(dy, dx);
+    packet.pitch = atan2(dz - z_offset, distance_xy) + M_PI / 2.0;
+  }
+}
+
+void ATRISerialDriver::sendFalseCommand()
+{
+  SendPacket packet;
+  packet.state = 2;
+  packet.cap_timestamp = 0;
+  packet.t_offset = 0;
+  packet.yaw = 0.0;
+  packet.pitch = 0.0;
+  crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
+  std::vector<uint8_t> data = toVector(packet);
+  serial_driver_->port()->send(data);
 }
 
 }  // namespace atri_serial_driver
