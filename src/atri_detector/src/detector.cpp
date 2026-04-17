@@ -42,48 +42,54 @@ std::vector<ColorBlock> Detector::Detect(cv::Mat & image)
   std::vector<YoloDetection> yolo_result;
   yolo_result = getYoloResult(image);
 
-  // Find colorblocks
-  // Find rectangle colorblocks
-  rect_count = 0;
-  for (const auto & det : yolo_result) {
-    if (det.class_id == 1) {
-      cv::Rect roi = det.bbox & cv::Rect(0, 0, image.cols, image.rows);
-      cv::Point2f yolo_kpt = det.kpt;
-      cv::Mat roi_img = image(roi).clone();
+  // Traditional image processing
+  if (yolo_result.empty()) {
+    traditionalDetect(blocks, image);
+  } else {
+    // YOLO
+    // Find colorblocks
+    // Find circle colorblock in the study period to lock the target block hist
+    if (!locked) {
+      ColorBlock circle_block;
+      for (const auto & det : yolo_result) {
+        if (det.class_id == 0) {
+          cv::Rect roi = det.bbox & cv::Rect(0, 0, image.cols, image.rows);
+          cv::Mat roi_img = image(roi).clone();
 
-      // Process roi image lonely to avoid interference from other blocks
-      auto contours = processImage(roi_img);
-      findRectangleColorBlocks(contours, blocks[rect_count], roi, yolo_kpt);
-      if (blocks[rect_count].kpt.size() == 5) {
-        rect_count++;
-      }
-      if (rect_count >= 5) {
-        break;
+          auto contours = processImage(roi_img);
+          findCircleColorBlock(contours, circle_block);
+
+          // Map roi coordinates back to original image
+          if (circle_block.kpt.size() == 5) {
+            for (auto & pt : circle_block.kpt) {
+              pt.x += roi.x;
+              pt.y += roi.y;
+            }
+
+            blocks[5] = circle_block;
+          }
+          break;
+        }
       }
     }
-  }
 
-  // Find circle colorblock in the study period to lock the target block hist
-  if (!locked) {
-    ColorBlock circle_block;
+    // Find rectangle colorblocks
+    rect_count = 0;
     for (const auto & det : yolo_result) {
-      if (det.class_id == 0) {
+      if (det.class_id == 1) {
         cv::Rect roi = det.bbox & cv::Rect(0, 0, image.cols, image.rows);
+        cv::Point2f yolo_kpt = det.kpt;
         cv::Mat roi_img = image(roi).clone();
 
+        // Process roi image lonely to avoid interference from other blocks
         auto contours = processImage(roi_img);
-        findCircleColorBlock(contours, circle_block);
-
-        // Map roi coordinates back to original image
-        if (circle_block.kpt.size() == 5) {
-          for (auto & pt : circle_block.kpt) {
-            pt.x += roi.x;
-            pt.y += roi.y;
-          }
-
-          blocks[5] = circle_block;
+        findRectangleColorBlocks(contours, blocks[rect_count], roi, yolo_kpt);
+        if (blocks[rect_count].kpt.size() == 5) {
+          rect_count++;
         }
-        break;
+        if (rect_count >= 5) {
+          break;
+        }
       }
     }
   }
@@ -115,23 +121,14 @@ std::vector<std::vector<cv::Point>> Detector::processImage(cv::Mat image)
 
   cv::Mat image_gray;
   cv::cvtColor(image_blurred, image_gray, cv::COLOR_BGR2GRAY);
-  cv::Mat image_hsv;
-  cv::cvtColor(image_blurred, image_hsv, cv::COLOR_BGR2HSV);
 
   cv::Mat mask;
   cv::adaptiveThreshold(
-    image_gray, mask, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY_INV, 19, 2);
+    image_gray, mask, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY_INV, 25, 0.5);
 
-  cv::Mat mask_other1;
-  cv::Mat mask_other2;
-  cv::inRange(image_hsv, cv::Scalar(20, 50, 60), cv::Scalar(40, 200, 255), mask_other1);
-  cv::inRange(image_hsv, cv::Scalar(0, 60, 50), cv::Scalar(25, 255, 255), mask_other2);
-  cv::bitwise_or(mask, mask_other1, mask);
-  cv::bitwise_or(mask, mask_other2, mask);
-
-  cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-  cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel, cv::Point(-1, -1), 1);
-  cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 1);
+  cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+  cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel, cv::Point(-1, -1), 2);
+  cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 2);
 
   std::vector<std::vector<cv::Point>> contours;
   cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
@@ -148,7 +145,7 @@ void Detector::findCircleColorBlock(
 
   for (size_t i = 0; i < contours.size(); ++i) {
     double area = cv::contourArea(contours[i]);
-    if (area < 500) {
+    if (area < 200) {
       continue;
     }
     if (calculateCircularity(contours[i])) {
@@ -173,6 +170,15 @@ void Detector::findCircleColorBlock(
     cv::Point2f top = center + cv::Point2f(-b * sin(angle_rad), b * cos(angle_rad));
     cv::Point2f bottom = center - cv::Point2f(-b * sin(angle_rad), b * cos(angle_rad));
 
+    double circle_radius = (a + b) / 2.0f;
+    if (circle_r_ == 0.0) {
+      circle_r_ = circle_radius;
+    } else {
+      if (std::abs(circle_radius - circle_r_) / circle_r_ > 0.5) {
+        return;
+      }
+      circle_r_ = 0.8 * circle_r_ + 0.2 * circle_radius;
+    }
     circle_block.kpt = {left, top, right, bottom, center};
   }
 }
@@ -183,7 +189,11 @@ void Detector::findRectangleColorBlocks(
 {
   for (const auto & contour : contours) {
     double area = cv::contourArea(contour);
-    if (area < 100) {
+    if (
+      circle_r_ > 0 &&
+      (area < 0.3 * 2 * circle_r_ * 2 * circle_r_ || area > 3 * 2 * circle_r_ * 2 * circle_r_)) {
+      continue;
+    } else if (circle_r_ == 0 && area < 200) {
       continue;
     }
 
@@ -215,7 +225,7 @@ void Detector::findRectangleColorBlocks(
       std::min(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2])) /
       std::max(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2]));
 
-    if (aspect_ratio < 0.5f) {
+    if (aspect_ratio < 0.6f) {
       continue;
     }
 
@@ -287,7 +297,7 @@ void Detector::findTargetBlock(const cv::Mat & image, std::vector<ColorBlock> & 
       votes_[0].vote_count++;
 
       // EMA update histogram
-      float alpha = 0.9f;
+      float alpha = 0.1f;
       votes_[0].hist = alpha * votes_[0].hist + (1 - alpha) * best_block_hist;
       if (votes_[0].vote_count >= lock_votes_threshold_) {
         locked = true;
@@ -618,6 +628,68 @@ void Detector::resetDetector()
   is_vote_started_ = false;
   votes_.clear();
   locked_hist_ = cv::Mat();
+}
+
+void Detector::traditionalDetect(std::vector<ColorBlock> & blocks, const cv::Mat & image)
+{
+  auto contours = processImage(image);
+
+  // Find circle block
+  if (!locked) {
+    ColorBlock circle_block;
+    findCircleColorBlock(contours, circle_block);
+    if (circle_block.kpt.size() == 5) {
+      blocks[5] = circle_block;
+    }
+  }
+
+  // Find rectangle blocks
+  rect_count = 0;
+  for (const auto & contour : contours) {
+    if (rect_count >= 5) break;
+
+    double area = cv::contourArea(contour);
+    if (
+      circle_r_ > 0 &&
+      (area < 0.4 * 2 * circle_r_ * 2 * circle_r_ || area > 2 * 2 * circle_r_ * 2 * circle_r_)) {
+      continue;
+    } else if (circle_r_ == 0 && area < 200) {
+      continue;
+    }
+
+    std::vector<cv::Point2f> corners;
+    std::vector<cv::Point> approx;
+    cv::approxPolyDP(contour, approx, 0.02 * cv::arcLength(contour, true), true);
+
+    if (approx.size() == 4) {
+      for (const auto & pt : approx) corners.push_back(cv::Point2f(pt.x, pt.y));
+    } else {
+      cv::RotatedRect rect = cv::minAreaRect(contour);
+      cv::Point2f pts[4];
+      rect.points(pts);
+      for (int i = 0; i < 4; i++) corners.push_back(pts[i]);
+    }
+
+    float aspect_ratio =
+      std::min(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2])) /
+      std::max(cv::norm(corners[0] - corners[1]), cv::norm(corners[1] - corners[2]));
+    if (aspect_ratio < 0.6f) continue;
+
+    cv::Point2f center(0, 0);
+    cv::Moments m = cv::moments(contour);
+    if (m.m00 > 1e-6) {
+      center = cv::Point2f(static_cast<float>(m.m10 / m.m00), static_cast<float>(m.m01 / m.m00));
+    }
+
+    std::vector<cv::Point2f> kpts = corners;
+    kpts.push_back(center);
+
+    cv::Point2f dummy_yolo_kpt = corners[0];
+    sortCorners(dummy_yolo_kpt, kpts);
+
+    blocks[rect_count].kpt = kpts;
+    rect_count++;
+  }
 }
 
 }  // namespace atri_detector

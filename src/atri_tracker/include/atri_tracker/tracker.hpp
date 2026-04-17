@@ -14,14 +14,19 @@
 // Eigen
 #include <Eigen/Dense>
 
+// STD
+#include <deque>
+#include <vector>
+
 // tracker
+#include "atri_tracker/circle_fitter.hpp"
 #include "atri_tracker/extended_kalman_filter.hpp"
 #include "atri_tracker/gauss_newton_solver.hpp"
 
 // mm
-/* #define BUFF_R 160.0 */
+#define BUFF_R 160.0
 // #define BUFF_R 56.0
-#define BUFF_R 78.0
+// #define BUFF_R 78.0
 
 namespace atri_tracker
 {
@@ -49,7 +54,7 @@ public:
     bool locked = false;
   };
   RotationBasis rotation_basis;
-  void updateRotationAxis(const Eigen::Vector3d & measured_axis);
+  void updateRotationAxis(const Eigen::Vector3d & measured_axis, double alpha);
 
   enum State {
     LOST,
@@ -108,7 +113,12 @@ private:
   int lost_count_;
 
   double last_theta_;
+
+  // Circle Fitter
+  CircleFitter fitter_3d_;
+  Eigen::Vector3d locked_center_;
 };
+
 }  // namespace atri_tracker
 
 #endif  // ATRI_TRACKER__TRACKER_HPP_

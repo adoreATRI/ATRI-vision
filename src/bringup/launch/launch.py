@@ -51,6 +51,13 @@ def generate_launch_description():
                 parameters=[camera_config]
             ),
 
+            # debug
+            # ComposableNode(
+            #     package='camera_simulator',
+            #     plugin='camera_simulator::CameraSimulatorNode',
+            #     name='camera_simulator_node'
+            # ),
+
             ComposableNode(
                 package='atri_detector',
                 plugin='atri_detector::DetectorNode',

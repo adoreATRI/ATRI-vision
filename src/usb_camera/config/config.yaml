@@ -6,7 +6,7 @@ usb_camera_node:
     frame_rate: 60
     
     exposure_time_mode: 0    
-    exposure_time: 50
+    exposure_time: 200  # 150
     brightness: 60            
     contrast: 50             
     saturation: 60            

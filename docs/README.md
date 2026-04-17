@@ -18,10 +18,14 @@ serial_driver：参考华师的开源，增加了角度解算和按键控制等�
 export ONNXRUNTIME_DIR=/home/adore/onnxruntime-*
 ```
 
-同时修改部分参数
-- atri_detector的pnp_solver的目标长度大小
+修改参数
+- atri_detector的pnp_solver的目标大小
 - atri_tracker中tracker.hpp中BUFF_R的大小
-- atri_serial_driver中的tf树调整
+- atri_serial_driver中的tf树调整和时间补偿
+
+可选：
+- usb_camera中相机参数的调整
+- atri_serial_driver中的角度补偿
 
 ## ATRI_vision编译和运行
 在`ATRI_vision`的根目录终端运行以下命令：
@@ -52,6 +56,13 @@ s控制数据的发送
     m     → 切换能量机关模式  
     d     → 切换方向  
     p     → 重置参数  
+
+### 调试工具
+```bash
+ros2 run plotjuggler plotjuggler
+
+ros2 bag record -o bags/01 /detector/color_blocks /tf /tf_static 
+```
 
 
 

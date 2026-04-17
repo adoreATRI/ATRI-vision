@@ -78,6 +78,8 @@ private:
   double pitch_z_;
   double camera_link_y_;
   double laser_link_y_;
+  double yaw_offset_;
+  double pitch_offset_;
 
   // Publishers
   rclcpp::Publisher<atri_interfaces::msg::TimeInfo>::SharedPtr time_info_pub_;

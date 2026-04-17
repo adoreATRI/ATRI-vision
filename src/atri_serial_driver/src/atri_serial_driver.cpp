@@ -42,6 +42,8 @@ ATRISerialDriver::ATRISerialDriver(const rclcpp::NodeOptions & options)
   pitch_z_ = this->declare_parameter("tf_offset.gimbal_pitch.z", 0.039);
   camera_link_y_ = this->declare_parameter("tf_offset.camera_link.y", -0.0364);
   laser_link_y_ = this->declare_parameter("tf_offset.laser_link.y", -0.03009);
+  yaw_offset_ = this->declare_parameter("angle_offset.yaw", 0.0);
+  pitch_offset_ = this->declare_parameter("angle_offset.pitch", 0.0);
 
   // TF broadcaster
   timestamp_offset_ = this->declare_parameter("timestamp_offset", 0.0);
@@ -352,15 +354,16 @@ void ATRISerialDriver::solveAttitude(
   double distance_xy = sqrt(dx * dx + dy * dy);
 
   if (distance_xy > fabs(y_offset)) {
-    packet.yaw = atan2(dy, dx) - asin(y_offset / distance_xy);
+    double yaw_tmp = atan2(dy, dx) - asin(y_offset / distance_xy);
+    packet.yaw = yaw_tmp + yaw_offset_;
 
     double distance_shot = sqrt(distance_xy * distance_xy - y_offset * y_offset);
     double elevation = atan2(dz - z_offset, distance_shot);
 
-    packet.pitch = elevation + M_PI / 2.0;
+    packet.pitch = elevation + M_PI / 2.0 + pitch_offset_;
   } else {
-    packet.yaw = atan2(dy, dx);
-    packet.pitch = atan2(dz - z_offset, distance_xy) + M_PI / 2.0;
+    packet.yaw = atan2(dy, dx) + yaw_offset_;
+    packet.pitch = atan2(dz - z_offset, distance_xy) + M_PI / 2.0 + pitch_offset_;
   }
 }
 

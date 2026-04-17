@@ -40,6 +40,6 @@ bool PnPSolver::solvePnP(const ColorBlock & block, cv::Mat & rvec, cv::Mat & tve
 
   return cv::solvePnP(
     block_points, image_block_points, camera_matrix_, dist_coeffs_, rvec, tvec, false,
-    cv::SOLVEPNP_ITERATIVE);
+    cv::SOLVEPNP_IPPE);
 }
 }  // namespace atri_detector

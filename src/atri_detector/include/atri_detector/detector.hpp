@@ -46,6 +46,8 @@ private:
   // Find circle colorblock
   void findCircleColorBlock(
     const std::vector<std::vector<cv::Point>> & contours, ColorBlock & circle_block);
+  double circle_r_ = 0.0;
+
   // Find rectangle colorblocks
   void findRectangleColorBlocks(
     const std::vector<std::vector<cv::Point>> & contours, ColorBlock & block, const cv::Rect roi,
@@ -84,6 +86,9 @@ private:
 
   // Config
   YAML::Node cfg_;
+
+  // Traditional image processing
+  void traditionalDetect(std::vector<ColorBlock> & blocks, const cv::Mat & image);
 };
 
 cv::Mat computeCircleHistogram(const cv::Mat & image, const ColorBlock & circle_block);

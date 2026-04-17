@@ -33,6 +33,7 @@ void Tracker::init(const atri_interfaces::msg::ColorBlockArray::SharedPtr & colo
   // Reset rotation basis
   rotation_basis.init = false;
   rotation_basis.locked = false;
+  fitter_3d_.clear();
 
   // Get block target
   block_tracked = getTargetBlock(color_block_msg);
@@ -100,6 +101,9 @@ void Tracker::update(const atri_interfaces::msg::ColorBlockArray::SharedPtr & co
       last_theta_ = measurement(3);
       target_state = ekf.update(measurement);
       RCLCPP_DEBUG(rclcpp::get_logger("atri_tracker"), "EKF update");
+      fitter_3d_.addPoint(Eigen::Vector3d(
+        block_tracked.block_position.x, block_tracked.block_position.y,
+        block_tracked.block_position.z));
     }
   } else {
     detect_count_ = detect_count_ ? detect_count_ - 1 : 0;
@@ -115,6 +119,14 @@ void Tracker::update(const atri_interfaces::msg::ColorBlockArray::SharedPtr & co
         detect_count_ = 0;
 
         rotation_basis.locked = true;
+        auto fitted = fitter_3d_.fit();
+        if (fitted.valid) {
+          locked_center_ = fitted.center;
+          updateRotationAxis(fitted.normal, 0.5);
+        } else {
+          // If fit is not valid, fallback to current predicted center
+          locked_center_ = Eigen::Vector3d(target_state(0), target_state(1), target_state(2));
+        }
 
         Eigen::Vector3d delta(
           block_tracked.block_position.x - block_tracked.center_position.x,
@@ -144,6 +156,11 @@ void Tracker::update(const atri_interfaces::msg::ColorBlockArray::SharedPtr & co
       tracker_state = TEMP_LOST;
     } else {
       lost_count_ = 0;
+    }
+    auto fitted = fitter_3d_.fit();
+    if (fitted.valid) {
+      locked_center_ = fitted.center;
+      updateRotationAxis(fitted.normal, 0.05);
     }
   } else if (tracker_state == TEMP_LOST) {
     if (!is_detected) {
@@ -266,18 +283,22 @@ Tracker::block_target Tracker::getTargetBlock(
   Eigen::Vector3d center_from_rect = block_pos_eigen - z * buff_r;
 
   block_targeted.center_position = geometry_msgs::msg::Point();
-  block_targeted.center_position.x = center_from_rect.x();
-  block_targeted.center_position.y = center_from_rect.y();
-  block_targeted.center_position.z = center_from_rect.z();
-  block_targeted.block_position = block_pos;
 
   // Get rune_axis
   if (!rotation_basis.locked) {
     tf2::Vector3 rune_x(1, 0, 0);
     tf2::Vector3 rune_axis = tf2::quatRotate(q, rune_x);
     Eigen::Vector3d axis(rune_axis.x(), rune_axis.y(), rune_axis.z());
-    updateRotationAxis(axis);
+    updateRotationAxis(axis, 0.8);
+    block_targeted.center_position.x = center_from_rect.x();
+    block_targeted.center_position.y = center_from_rect.y();
+    block_targeted.center_position.z = center_from_rect.z();
+  } else {
+    block_targeted.center_position.x = locked_center_.x();
+    block_targeted.center_position.y = locked_center_.y();
+    block_targeted.center_position.z = locked_center_.z();
   }
+  block_targeted.block_position = block_pos;
 
   Eigen::Vector3d delta(
     block_pos.x - block_targeted.center_position.x, block_pos.y - block_targeted.center_position.y,
@@ -289,9 +310,9 @@ Tracker::block_target Tracker::getTargetBlock(
   return block_targeted;
 }
 
-void Tracker::updateRotationAxis(const Eigen::Vector3d & measured_axis)
+void Tracker::updateRotationAxis(const Eigen::Vector3d & measured_axis, double alpha)
 {
-  Eigen::Vector3d axis(measured_axis.x(), measured_axis.y(), 0.0);
+  Eigen::Vector3d axis(measured_axis.x(), measured_axis.y(), measured_axis.z());
   if (axis.norm() < 1e-6) {
     return;
   }
@@ -301,16 +322,24 @@ void Tracker::updateRotationAxis(const Eigen::Vector3d & measured_axis)
     rotation_basis.rotation_axis = axis;
     rotation_basis.init = true;
   } else {
-    double alpha = 0.1;
     rotation_basis.rotation_axis =
       (alpha * axis + (1.0 - alpha) * rotation_basis.rotation_axis).normalized();
   }
 
+  double n_h = sqrt(
+    rotation_basis.rotation_axis.x() * rotation_basis.rotation_axis.x() +
+    rotation_basis.rotation_axis.y() * rotation_basis.rotation_axis.y());
+  if (n_h < 1e-6) {
+    Eigen::Vector3d x_axis(1, 0, 0);
+    rotation_basis.v = rotation_basis.rotation_axis.cross(x_axis).normalized();
+    rotation_basis.u = rotation_basis.v.cross(rotation_basis.rotation_axis).normalized();
+  } else {
+    double nz = rotation_basis.rotation_axis.z();
     double nx = rotation_basis.rotation_axis.x();
     double ny = rotation_basis.rotation_axis.y();
-
-    rotation_basis.u = Eigen::Vector3d(0.0, 0.0, 1.0);
-    rotation_basis.v = Eigen::Vector3d(ny, -nx, 0.0);
+    rotation_basis.u = Eigen::Vector3d(-nz * nx / n_h, -nz * ny / n_h, n_h);
+    rotation_basis.v = Eigen::Vector3d(ny / n_h, -nx / n_h, 0);
+  }
 }
 
 }  // namespace atri_tracker
