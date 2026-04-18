@@ -44,19 +44,19 @@ def generate_launch_description():
         executable='component_container_mt',
         output='screen',
         composable_node_descriptions=[
-            ComposableNode(
-                package='usb_camera',
-                plugin='usb_camera::USBCameraNode',
-                name='usb_camera_node',
-                parameters=[camera_config]
-            ),
-
-            # debug
             # ComposableNode(
-            #     package='camera_simulator',
-            #     plugin='camera_simulator::CameraSimulatorNode',
-            #     name='camera_simulator_node'
+            #     package='usb_camera',
+            #     plugin='usb_camera::USBCameraNode',
+            #     name='usb_camera_node',
+            #     parameters=[camera_config]
             # ),
+
+            #debug
+            ComposableNode(
+                package='camera_simulator',
+                plugin='camera_simulator::CameraSimulatorNode',
+                name='camera_simulator_node'
+            ),
 
             ComposableNode(
                 package='atri_detector',

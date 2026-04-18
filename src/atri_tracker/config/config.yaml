@@ -3,18 +3,18 @@ tracker_node:
     target_frame: "odom"
 
     tracker:
-      max_match_center_xoy: 0.5
+      max_match_center_xoy: 1.5
       max_match_theta: 1.0
       lost_time_threshold: 1.0
       tracking_threshold: 10
 
     ekf:
       sigma2_q_xyz: 1.0e-7
-      sigma2_q_theta: 1.0e-2
+      sigma2_q_theta: 1.0
       sigma2_q_r: 1.0e-8
 
-      r_block: 5.0e-6 #5.0e-6 4
-      r_center: 5.0e-3 # 5.0e-4 
+      r_block: 5.0e-6
+      r_center: 5.0e-4
       r_block_min: 1.0e-8
       r_center_min: 1.0e-6
 

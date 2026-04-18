@@ -8,14 +8,12 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/create_timer_ros.h>
 #include <tf2_ros/message_filter.h>
-#include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 
 // ROS2
 #include <message_filters/subscriber.h>
 
 #include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/float64_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
@@ -86,8 +84,6 @@ private:
   message_filters::Subscriber<atri_interfaces::msg::ColorBlockArray> color_block_sub_;
   std::shared_ptr<tf2_filter> tf2_filter_;
 
-  std::shared_ptr<tf2_ros::TransformBroadcaster> tf2_broadcaster_;
-
   // Publishers
   rclcpp::Publisher<atri_interfaces::msg::Rune>::SharedPtr rune_publisher_;
 
@@ -99,9 +95,6 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr block_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr center_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr measure_marker_pub_;
-
-  // Debug Publiser for PlotJuggler
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr debug_pub_;
 
   visualization_msgs::msg::Marker block_marker_;
   visualization_msgs::msg::Marker center_marker_;

@@ -45,8 +45,6 @@ TrackerNode::TrackerNode(const rclcpp::NodeOptions & options) : Node("atri_track
     this->create_publisher<visualization_msgs::msg::Marker>("tracker/center_marker", 10);
   measure_marker_pub_ =
     this->create_publisher<visualization_msgs::msg::Marker>("tracker/measure_marker", 10);
-  debug_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>("tracker/debug_data", 10);
-  tf2_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
   // Subscriber with tf2 message_filter
   keyboard_control_sub_ = this->create_subscription<std_msgs::msg::String>(
@@ -121,14 +119,12 @@ void TrackerNode::colorBlockCallback(
       tracker_->solve(time);
     }
 
-    if (
-      tracker_->tracker_state == Tracker::State::DETECTING ||
+    if (tracker_->tracker_state == Tracker::State::DETECTING) {
+      rune_msg.tracking = false;
+    } else if (
       tracker_->tracker_state == Tracker::State::TRACKING ||
       tracker_->tracker_state == Tracker::State::TEMP_LOST) {
-      bool tracking_active = tracker_->tracker_state == Tracker::State::TRACKING ||
-                             tracker_->tracker_state == Tracker::State::TEMP_LOST;
-
-      rune_msg.tracking = tracking_active;
+      rune_msg.tracking = true;
       const auto & state = tracker_->target_state;
 
       // Calculate from prediction
@@ -146,25 +142,6 @@ void TrackerNode::colorBlockCallback(
       rune_msg.axis_v.x = tracker_->rotation_basis.v.x();
       rune_msg.axis_v.y = tracker_->rotation_basis.v.y();
       rune_msg.axis_v.z = tracker_->rotation_basis.v.z();
-      // Visual the rotation axis
-      geometry_msgs::msg::TransformStamped rotation_axis;
-      rotation_axis.header.stamp = time;
-      rotation_axis.header.frame_id = target_frame_;
-      rotation_axis.child_frame_id = "rune_center_frame";
-      rotation_axis.transform.translation.x = block_predict.center_position.x;
-      rotation_axis.transform.translation.y = block_predict.center_position.y;
-      rotation_axis.transform.translation.z = block_predict.center_position.z;
-      Eigen::Matrix3d rotation_matrix;
-      rotation_matrix.col(0) = tracker_->rotation_basis.v;
-      rotation_matrix.col(1) = tracker_->rotation_basis.u;
-      rotation_matrix.col(2) = tracker_->rotation_basis.rotation_axis;
-      Eigen::Quaterniond center_q(rotation_matrix);
-      rotation_axis.transform.rotation.x = center_q.x();
-      rotation_axis.transform.rotation.y = center_q.y();
-      rotation_axis.transform.rotation.z = center_q.z();
-      rotation_axis.transform.rotation.w = center_q.w();
-      tf2_broadcaster_->sendTransform(rotation_axis);
-
       rune_msg.r = state(6);
       rune_msg.theta = block_predict.theta;
       rune_msg.a = 0.0;
@@ -175,7 +152,7 @@ void TrackerNode::colorBlockCallback(
       auto now_sec = time.seconds();
       auto obs_time = tracker_->obs_start_time.seconds();
 
-      if (tracking_active && task_mode_ == "large_buff") {
+      if (task_mode_ == "large_buff") {
         const auto & gns_state = tracker_->spd_state;
         int sign = state(8) >= 0 ? 1 : -1;
         if (tracker_->solver_status == Tracker::SolverStatus::VALID) {
@@ -187,7 +164,7 @@ void TrackerNode::colorBlockCallback(
           rune_msg.t_offset = int((now_sec - obs_time + rune_msg.c / rune_msg.w) * 1000) % T;
 
         } else {
-          rune_msg.tracking = false;
+          rune_msg.tracking = tracker_->solver_status == Tracker::SolverStatus::INVALID;
         }
       }
 
@@ -206,13 +183,6 @@ void TrackerNode::colorBlockCallback(
         atan2(block_predict.center_position.y, block_predict.center_position.x), -M_PI / 2, 0);
       block_marker_.pose.orientation = tf2::toMsg(q);
       block_marker_pub_->publish(block_marker_);
-
-      // Publish debug data for PlotJuggler
-      std_msgs::msg::Float64MultiArray debug_msg;
-      debug_msg.data.push_back(tracker_->measurement(3));  // [0] raw measurement theta
-      debug_msg.data.push_back(state(7));                  // [1] filter state theta
-      debug_msg.data.push_back(rune_msg.b);                // [2] filter state omega (estimated)
-      debug_pub_->publish(debug_msg);
     }
   }
   last_time_ = time;
