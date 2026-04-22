@@ -18,6 +18,8 @@
 
   <depend>atri_interfaces</depend>
   <depend>tf2_geometry_msgs</depend>
+  <depend>asio_cmake_module</depend>
+  <depend>io_context</depend>
 
   <depend>serial_driver</depend>
   <depend>tf2</depend>
