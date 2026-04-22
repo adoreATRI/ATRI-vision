@@ -1,9 +1,8 @@
-import sys
-import tty
-import termios
 import select
-
+import sys
+import termios
 import time
+import tty
 
 import rclpy
 from rclpy.node import Node
@@ -12,15 +11,15 @@ from std_msgs.msg import String
 
 class KeyboardNode(Node):
     def __init__(self):
-        super().__init__('keyboard_node')
-        self.keyboard_control_pub_ = self.create_publisher(String, 'keyboard_node/key', 10)
-    
+        super().__init__("keyboard_node")
+        self.keyboard_control_pub_ = self.create_publisher(String, "keyboard_node/key", 10)
 
     def _send_key(self, key):
         msg = String()
         msg.data = key
         self.keyboard_control_pub_.publish(msg)
-        
+
+
 def get_key():
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -33,27 +32,28 @@ def get_key():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return None
 
+
 def main(args=None):
     rclpy.init(args=args)
     keyboard_node = KeyboardNode()
     while rclpy.ok():
         key = get_key()
         if key:
-            if key == 'b':
+            if key == "b":
                 print("Exiting keyboard node.")
                 break
-            if key == 'r':
+            if key == "r":
                 print("Resetting detector.")
-            if key == 's':
+            if key == "s":
                 print("Starting control.")
-            if key == 'f':
+            if key == "f":
                 print("False tracking.")
-           
+
             keyboard_node._send_key(key)
         time.sleep(0.001)
-        
-    
+
     rclpy.shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

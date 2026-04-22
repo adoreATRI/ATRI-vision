@@ -252,7 +252,7 @@ void TrackerNode::initEKF()
     // clang-format off
     f <<  1,   0,   0,   dt_, 0,   0,   0,   0,   0,
           0,   1,   0,   0,   dt_, 0,   0,   0,   0,
-          0,   0,   1,   0,   0,   dt_, 0,   0,   0, 
+          0,   0,   1,   0,   0,   dt_, 0,   0,   0,
           0,   0,   0,   1,   0,   0,   0,   0,   0,
           0,   0,   0,   0,   1,   0,   0,   0,   0,
           0,   0,   0,   0,   0,   1,   0,   0,   0,
@@ -299,7 +299,7 @@ void TrackerNode::initEKF()
   s2qr_ = declare_parameter("ekf.sigma2_q_r", 1e-6);
   auto u_q = [this]() {
     Eigen::MatrixXd q(9, 9);
-    
+
     double t = dt_;
     double x = s2qxyz_, y = s2qxyz_, z = s2qxyz_, theta = s2qtheta_, r = s2qr_;
     double q_x_x = pow(t, 4) / 4 * x, q_x_vx = pow(t, 3) / 2 * x, q_vx_vx = pow(t, 2) * x;
@@ -331,10 +331,8 @@ void TrackerNode::initEKF()
     Eigen::DiagonalMatrix<double, 4> r;
     double xb = r_block_;
     double xc = r_center_;
-    r.diagonal() << std::max(abs(xb * z(0)), r_block_min_),
-                     std::max(abs(xb * z(1)), r_block_min_),
-                     std::max(abs(xb * z(2)), r_block_min_),
-                     std::max(abs(xc * z(3)), r_center_min_);
+    r.diagonal() << std::max(abs(xb * z(0)), r_block_min_), std::max(abs(xb * z(1)), r_block_min_),
+      std::max(abs(xb * z(2)), r_block_min_), std::max(abs(xc * z(3)), r_center_min_);
     return r;
   };
   // P - error estimate covariance matrix
@@ -427,9 +425,8 @@ void TrackerNode::initGNS()
   r_c_ = declare_parameter("ekf_gns.r_c", 1e-8);
   auto u_r_gns = [this](const Eigen::VectorXd & z) {
     Eigen::DiagonalMatrix<double, 3> r;
-    r.diagonal() << std::max(abs(r_a_ * z(0)), 1e-4),
-                     std::max(abs(r_w_ * z(1)), 1e-4),
-                     std::max(abs(r_c_ * z(2)), 1e-4);
+    r.diagonal() << std::max(abs(r_a_ * z(0)), 1e-4), std::max(abs(r_w_ * z(1)), 1e-4),
+      std::max(abs(r_c_ * z(2)), 1e-4);
     return r;
   };
   // P - error estimate covariance matrix

@@ -41,7 +41,7 @@ ros2 launch bringup launch.py
 source install/setup.bash
 ros2 run atri_keyboard keyboard_node
 ```
-其中r控制重置检测器和追踪器状态，并切换能量机关模式  
+其中r控制重置检测器和追踪器状态，并切换能量机关模式
 s控制数据的发送
 
 
@@ -52,20 +52,14 @@ s控制数据的发送
 /usr/bin/env python3 ./src/simulator/buff_simulator.py
 ```
 仿真器使用说明：
-    r     → 重置色块颜色  
-    m     → 切换能量机关模式  
-    d     → 切换方向  
-    p     → 重置参数  
+    r     → 重置色块颜色
+    m     → 切换能量机关模式
+    d     → 切换方向
+    p     → 重置参数
 
 ### 调试工具
 ```bash
 ros2 run plotjuggler plotjuggler
 
-ros2 bag record -o bags/01 /detector/color_blocks /tf /tf_static 
+ros2 bag record -o bags/01 /detector/color_blocks /tf /tf_static
 ```
-
-
-
-
-
-

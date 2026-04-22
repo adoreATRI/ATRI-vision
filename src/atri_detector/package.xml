@@ -5,7 +5,7 @@
   <version>1.1.0</version>
   <description>
     Detect the target block which is the same color as the circle block and publish its 3D position.
-    Use onnx load the yolo8 model and find the target block with OpenCV 
+    Use onnx load the yolo8 model and find the target block with OpenCV
     Subscribe the usb_camera/image_compressed jpeg image format topic and usb_camera/camera_info topic, and subscribe the keyboard_node/key topic to control the detector state
     Publish the detector/color_blocks topic.
   </description>
@@ -28,7 +28,7 @@
   <depend>yaml_cpp</depend>
 
   <depend>opencv</depend>
-  
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

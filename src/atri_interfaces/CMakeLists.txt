@@ -12,17 +12,15 @@ find_package(rosidl_default_generators REQUIRED)
 
 find_package(geometry_msgs REQUIRED)
 
-
 # ================= 生成消息接口 =================
-rosidl_generate_interfaces(${PROJECT_NAME}
+rosidl_generate_interfaces(
+  ${PROJECT_NAME}
   "msg/ColorBlock.msg"
   "msg/ColorBlockArray.msg"
   "msg/Rune.msg"
   "msg/TimeInfo.msg"
-
   DEPENDENCIES
-    std_msgs
-    geometry_msgs
-)
+  std_msgs
+  geometry_msgs)
 
 ament_package()

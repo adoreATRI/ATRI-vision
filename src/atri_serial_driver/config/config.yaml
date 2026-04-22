@@ -6,19 +6,19 @@ atri_serial_driver:
     parity: "none"        ## none, odd, even
     stop_bits: "1.0"     ## 1, 1.5, 2
 
-    timestamp_offset: 175.0 # 165
+    timestamp_offset: 173.0 # 175
 
     tf_offset:
         gimbal_yaw:
-            z: 0.0565 
+            z: 0.0565
 
         gimbal_pitch:
             y: -0.00919
             z: 0.0375 # 0.039
-          
+
         camera_link:
             y: -0.0364
-          
+
         laser_link:
             y: -0.03369 # -0.03009
 

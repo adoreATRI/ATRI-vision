@@ -306,11 +306,11 @@ void Tracker::updateRotationAxis(const Eigen::Vector3d & measured_axis)
       (alpha * axis + (1.0 - alpha) * rotation_basis.rotation_axis).normalized();
   }
 
-    double nx = rotation_basis.rotation_axis.x();
-    double ny = rotation_basis.rotation_axis.y();
+  double nx = rotation_basis.rotation_axis.x();
+  double ny = rotation_basis.rotation_axis.y();
 
-    rotation_basis.u = Eigen::Vector3d(0.0, 0.0, 1.0);
-    rotation_basis.v = Eigen::Vector3d(ny, -nx, 0.0);
+  rotation_basis.u = Eigen::Vector3d(0.0, 0.0, 1.0);
+  rotation_basis.v = Eigen::Vector3d(ny, -nx, 0.0);
 }
 
 }  // namespace atri_tracker
