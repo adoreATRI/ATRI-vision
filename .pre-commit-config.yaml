@@ -12,7 +12,16 @@ repos:
       - id: check-added-large-files   # 防止误提交超大文件 (默认限制 500KB)
 
   # ------------------------
-  # C++ 格式化 (ROS2 rclcpp)
+  # Markdown 文件检查 (README.md、文档等)
+  # ------------------------
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
+    hooks:
+      - id: markdownlint
+        args: ["--fix"]
+
+  # ------------------------
+  # C++ 格式化
   # ------------------------
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v17.0.6
@@ -21,28 +30,26 @@ repos:
         types_or: [c++, c]
 
   # ------------------------
-  # Python 格式化与静态检查 (ROS2 rclpy / launch.py)
+  # Python 格式化与静态检查
   # ------------------------
   - repo: https://github.com/psf/black
     rev: 24.3.0
     hooks:
       - id: black
-        args: ["--line-length=100"]   # ROS2 Python 代码通常允许 100 字符行宽
+        args: ["--line-length=100"]
 
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
-        args: ["--profile=black"]     # 配合 Black 使用，避免冲突
+        args: ["--profile=black"]
 
   - repo: https://github.com/pycqa/flake8
     rev: 7.0.0
     hooks:
       - id: flake8
-        # flake8-bugbear 是寻找常见 Bug 和设计问题的插件
         additional_dependencies: [flake8-bugbear]
         args: ["--max-line-length=100", "--ignore=E203,W503"]
-        # 忽略与 Black 格式化冲突的规则 (E203括号前空格，W503二元运算符前换行)
 
   # ------------------------
   # CMakeLists.txt 格式化
@@ -50,7 +57,7 @@ repos:
   - repo: https://github.com/cheshirekow/cmake-format-precommit
     rev: v0.6.13
     hooks:
-      - id: cmake-format              # 格式化 CMake 文件，保持与 ROS2 ament_cmake 风格整洁
+      - id: cmake-format
 
   # ------------------------
   # Shell 脚本检查 (常用于环境配置/一键启动脚本)
@@ -58,4 +65,4 @@ repos:
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.9.0.6
     hooks:
-      - id: shellcheck                # 对 .sh 脚本执行静态语病和风险检查
+      - id: shellcheck
