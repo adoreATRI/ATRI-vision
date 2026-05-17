@@ -34,7 +34,7 @@ DetectorNode::DetectorNode(const rclcpp::NodeOptions & options) : Node("detector
       camera_info_sub_.reset();
     });
   image_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
-    "usb_camera/image_compressed", rclcpp::SensorDataQoS(),
+    "usb_camera/image/compressed", rclcpp::SensorDataQoS(),
     std::bind(&DetectorNode::imageCallback, this, std::placeholders::_1));
 }
 

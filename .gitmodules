@@ -1,0 +1,3 @@
+[submodule "src/ATRI_usb_camera"]
+	path = src/ATRI_usb_camera
+	url = https://github.com/adoreATRI/ATRI_usb_camera.git

@@ -3,3 +3,7 @@ install
 log
 bags
 yolo
+
+.vscode/
+
+__pycache__/

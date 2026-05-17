@@ -9,6 +9,6 @@ find_package(ament_cmake REQUIRED)
 
 find_package(yaml REQUIRED)
 
-install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config launch rviz DESTINATION share/${PROJECT_NAME})
 
 ament_package()

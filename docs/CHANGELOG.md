@@ -61,3 +61,9 @@
 ### Chore
 
 - 添加pre-commit配置文件和github actions配置文件对代码进行自动检查和格式化
+
+## [1.0.0] - 2026-05-17
+
+### Chore
+
+- 重新整理launch文件，README，添加技术文档和演示图片视频
