@@ -1,7 +1,7 @@
 import math
-import os
 import random
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -53,9 +53,9 @@ class BuffSimulatorNew:
         self.white_bg_inner_dist = 11.339 * self.pixels_per_cm
 
         # Load background image
-        bg_path = "/home/adore/ATRI_vision/src/simulator/background/background.jpg"
-        if os.path.exists(bg_path):
-            self.bg_img = cv2.imread(bg_path)
+        bg_path = Path(__file__).resolve().parent / "background" / "background.jpg"
+        if bg_path.exists():
+            self.bg_img = cv2.imread(str(bg_path))
             if self.bg_img is not None:
                 self.bg_img = cv2.resize(self.bg_img, (self.img_w, self.img_h))
         else:

@@ -45,7 +45,7 @@ git submodule update --init --recursive
 下载对应适合自己系统的版本，在 `.bashrc` 中添加以下内容：
 
 ```bash
-export ONNXRUNTIME_DIR=/home/adore/onnxruntime-*
+export ONNXRUNTIME_DIR=$HOME/onnxruntime-*
 ```
 
 ### 2.3 修改参数
@@ -111,7 +111,7 @@ ros2 bag record -o bags/01 /detector/color_blocks /tf /tf_static
 
 ![检测器效果图](./docs/image/仿真-检测器效果图.png)
 
-[仿真器演示视频](./docs/video/仿真器演示视频.mp4)
+![仿真器演示视频](./docs/video/仿真器演示视频.gif)
 
 ### 真实环境
 
